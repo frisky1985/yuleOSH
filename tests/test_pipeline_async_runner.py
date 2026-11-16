@@ -208,3 +208,67 @@ def test_run_single_layer_known():
         ar._run_ci_job("job_l", "/tmp", 1)
     assert ar._PIPELINE_JOBS["job_l"]["status"] == "passed"
     assert "True" in ar._PIPELINE_JOBS["job_l"]["result"]
+
+
+# ── Cancellation / stage resume ───────────────────────────────────────────
+
+from yuleosh.pipeline.async_runner import (  # noqa: E402
+    submit_full_pipeline,
+    request_cancel,
+    _run_full_pipeline,
+)
+
+
+def test_request_cancel_queued_job_marks_cancelled():
+    _clear_state()
+    with patch("yuleosh.pipeline.async_runner._run_full_pipeline"):
+        job_id = submit_full_pipeline("/tmp/test")
+    assert request_cancel(job_id) is True
+    status = get_job_status(job_id)
+    assert status["status"] == "cancelled"
+    assert status["cancel_requested"] is True
+    # 未开始的阶段收敛为 skipped
+    assert all(s["status"] in ("skipped", "cancelled") for s in status["stages"])
+    # 已取消任务不能重复取消
+    assert request_cancel(job_id) is False
+
+
+def test_request_cancel_unknown_job_returns_false():
+    _clear_state()
+    assert request_cancel("nonexistent") is False
+
+
+def test_resume_from_skips_earlier_stages(tmp_path):
+    _clear_state()
+    with patch("yuleosh.pipeline.async_runner._run_full_pipeline"):
+        job_id = submit_full_pipeline(str(tmp_path), resume_from="coverage")
+
+    with patch("yuleosh.pipeline.async_runner.time.sleep"), \
+         patch("yuleosh.ci.run_layer3", return_value={"coverage": 87}):
+        _run_full_pipeline(
+            job_id, str(tmp_path), None, None, resume_from="coverage",
+        )
+
+    status = get_job_status(job_id)
+    assert status["status"] == "passed"
+    stages = {s["key"]: s["status"] for s in status["stages"]}
+    assert stages["coverage"] == "passed"
+    assert stages["arxml_parse"] == "skipped"
+    assert stages["ci_compile"] == "skipped"
+
+
+def test_cancel_checked_at_stage_boundary(tmp_path):
+    """取消请求在阶段边界生效：当前阶段完成后不再继续后续阶段。"""
+    _clear_state()
+    with patch("yuleosh.pipeline.async_runner._run_full_pipeline"):
+        job_id = submit_full_pipeline(str(tmp_path))
+    # 模拟运行到 code_generate 阶段时用户点了取消
+    job = _PIPELINE_JOBS[job_id]
+    job["cancel_requested"] = True
+
+    with patch("yuleosh.pipeline.async_runner.time.sleep"):
+        _run_full_pipeline(job_id, str(tmp_path), None, None)
+
+    status = get_job_status(job_id)
+    assert status["status"] == "cancelled"
+    assert status["result"]["cancelled"] is True

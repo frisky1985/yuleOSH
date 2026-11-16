@@ -2612,3 +2612,103 @@ class TestReviewCenter:
             "DELETE", f"projects/{pid}/review/{rid}", None, {},
         )
         assert status == 404
+
+
+# ── Artifact full-text search (desktop) ───────────────────────────────────
+
+class TestArtifactSearch:
+    def _project(self, d):
+        resp, _ = d.handle_desktop("POST", "projects", _body({"name": "P"}), {})
+        return resp["project"]["id"]
+
+    def _write(self, pid, rel, content):
+        from yuleosh.desktop import workspace
+        p = workspace._project_dir(pid) / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
+        return p
+
+    def test_search_returns_path_line_and_text(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        self._write(pid, "requirements/requirements.md", "# 需求\n夜间自动开启车灯\n")
+        resp, status = d.handle_desktop(
+            "GET", f"projects/{pid}/artifacts/search", None, {"q": "自动"},
+        )
+        assert status == 200
+        assert resp["ok"] is True
+        assert resp["matches"][0]["path"] == "requirements/requirements.md"
+        assert resp["matches"][0]["line"] == 2
+        assert "自动" in resp["matches"][0]["text"]
+
+    def test_search_requires_at_least_two_chars(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        self._write(pid, "code/main.c", "int main(void){return 0;}\n")
+        resp, status = d.handle_desktop(
+            "GET", f"projects/{pid}/artifacts/search", None, {"q": "m"},
+        )
+        assert status == 200
+        assert resp["matches"] == []
+
+    def test_search_missing_project_404(self, desktop_api):
+        resp, status = desktop_api.handle_desktop(
+            "GET", "projects/nope/artifacts/search", None, {"q": "needle"},
+        )
+        assert status == 404
+
+
+# ── Pipeline cancellation (desktop route) ─────────────────────────────────
+
+class TestPipelineCancel:
+    def _project(self, d):
+        resp, _ = d.handle_desktop("POST", "projects", _body({"name": "P"}), {})
+        return resp["project"]["id"]
+
+    def test_cancel_requires_job_id(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/pipeline/cancel", _body({}), {},
+        )
+        assert status == 400
+        assert resp["ok"] is False
+
+    def test_cancel_unknown_job_404(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/pipeline/cancel", _body({"job_id": "deadbeef"}), {},
+        )
+        assert status == 404
+        assert resp["ok"] is False
+
+
+# ── Artifact tree mtime (stale review detection) ──────────────────────────
+
+class TestArtifactTreeMtime:
+    def test_file_nodes_expose_mtime(self, desktop_api):
+        d = desktop_api
+        resp, _ = d.handle_desktop("POST", "projects", _body({"name": "P"}), {})
+        pid = resp["project"]["id"]
+        from yuleosh.desktop import workspace
+        target = workspace._project_dir(pid) / "code" / "main.c"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("int main(void){return 0;}\n", encoding="utf-8")
+
+        resp, status = d.handle_desktop("GET", f"projects/{pid}/artifacts", None, {})
+        assert status == 200
+
+        def find(node):
+            if node.get("type") == "file" and node.get("path") == "code/main.c":
+                return node
+            for child in node.get("children", []):
+                hit = find(child)
+                if hit:
+                    return hit
+            return None
+
+        node = find(resp["tree"])
+        assert node is not None
+        assert isinstance(node["mtime"], (int, float))
+        assert node["mtime"] > 0

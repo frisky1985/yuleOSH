@@ -25,6 +25,8 @@ import {
   Sparkles,
   Search,
   Filter,
+  Copy,
+  AlertTriangle,
   ChevronsUpDown,
   ChevronsDownUp,
   Settings,
@@ -40,6 +42,7 @@ import {
   buildSections,
   countFiles,
   filterTree,
+  filterTreeByPaths,
   firstFile,
   flattenFiles,
   sectionMeta,
@@ -49,8 +52,14 @@ import {
 import {
   REVIEW_TONES,
   REVIEW_TONE_META,
+  aggregateReviewTone,
   countReviewTones,
+  latestReviewByArtifact,
+  matchesReviewFilter,
+  reviewCoverage,
   reviewToneByArtifact,
+  staleArtifactsByTree,
+  type ReviewFilter,
   type ReviewTone,
 } from "@/lib/review-status";
 import { CodeBlock } from "@/components/code-block";
@@ -131,6 +140,55 @@ function timeAgo(iso?: string | null): string {
   return `${Math.floor(hrs / 24)} 天前`;
 }
 
+// ─── Workspace persistence ────────────────────────────────────────────────
+
+const WORKSPACE_STATE_KEY = "yuleosh.desktop.workspace.v1";
+
+interface PersistedWorkspaceState {
+  activeId?: string | null;
+  openSections?: Record<string, boolean>;
+  selectedFile?: string | null;
+  query?: string;
+  onlyWithFiles?: boolean;
+  reviewFilter?: ReviewFilter;
+}
+
+function loadWorkspaceState(): PersistedWorkspaceState {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(WORKSPACE_STATE_KEY);
+    return raw ? (JSON.parse(raw) as PersistedWorkspaceState) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveWorkspaceState(state: PersistedWorkspaceState) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(WORKSPACE_STATE_KEY, JSON.stringify(state));
+  } catch {
+    /* 隐私模式 / 配额不足时静默忽略 */
+  }
+}
+
+/** 长任务完成后弹桌面通知；在 Electron 里由主进程负责（窗口聚焦时跳过）。 */
+function notifyDesktop(title: string, body: string) {
+  if (typeof window === "undefined") return;
+  const api = (window as any).electronAPI;
+  if (api?.notify) {
+    api.notify({ title, body }).catch(() => {});
+    return;
+  }
+  try {
+    if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+      new Notification(title, { body });
+    }
+  } catch {
+    /* 浏览器不支持时忽略 */
+  }
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────
 
 export default function DesktopWorkspacePage() {
@@ -146,9 +204,19 @@ export default function DesktopWorkspacePage() {
   });
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState<string>("");
+  const [fileNotice, setFileNotice] = useState<string | null>(null);
+  const [copiedPath, setCopiedPath] = useState(false);
   const [reviewComment, setReviewComment] = useState("");
+  const [lineStart, setLineStart] = useState("");
+  const [lineEnd, setLineEnd] = useState("");
+  const [highlightLine, setHighlightLine] = useState<number | null>(null);
+  const [reviewFilter, setReviewFilter] = useState<ReviewFilter>("all");
+  const [searchResults, setSearchResults] = useState<Array<{
+    path: string; line: number; text: string;
+  }>>([]);
   const [reviews, setReviews] = useState<Array<{
     id: string; artifact: string; status: string; comment: string; author: string; created_at: string;
+    line_start?: number | null; line_end?: number | null;
   }>>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
@@ -157,10 +225,15 @@ export default function DesktopWorkspacePage() {
   const [runs, setRuns] = useState<PipelineRun[]>([]);
   const [runDetailJob, setRunDetailJob] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
+  const [runJobId, setRunJobId] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
   const [pollProgress, setPollProgress] = useState(0);
   const [pollStage, setPollStage] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
+  const [backendUp, setBackendUp] = useState<boolean | null>(null);
+  const restoredRef = useRef<PersistedWorkspaceState>({});
+  const [persistReady, setPersistReady] = useState(false);
   const [showNewProject, setShowNewProject] = useState(false);
   const [showTraceability, setShowTraceability] = useState(false);
   const [showBaselines, setShowBaselines] = useState(false);
@@ -174,6 +247,54 @@ export default function DesktopWorkspacePage() {
   const [showPalette, setShowPalette] = useState(false);
   const [loading, setLoading] = useState(true);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // ── 工作现场恢复 / 持久化 ────────────────────────────────────────────
+  // 首帧后再读取 localStorage，避免 Next.js 预渲染水合不一致。
+  useEffect(() => {
+    const saved = loadWorkspaceState();
+    restoredRef.current = saved;
+    if (saved.activeId) setActiveId(saved.activeId);
+    if (saved.query) setQuery(saved.query);
+    if (typeof saved.onlyWithFiles === "boolean") setOnlyWithFiles(saved.onlyWithFiles);
+    if (saved.openSections) setOpenSections(saved.openSections);
+    if (saved.reviewFilter) setReviewFilter(saved.reviewFilter);
+    setPersistReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!persistReady) return;
+    saveWorkspaceState({
+      activeId,
+      openSections,
+      selectedFile,
+      query,
+      onlyWithFiles,
+      reviewFilter,
+    });
+  }, [persistReady, activeId, openSections, selectedFile, query, onlyWithFiles, reviewFilter]);
+
+  // ── Python 后端健康状态（Electron） ─────────────────────────────────
+  useEffect(() => {
+    const api = (window as Window & {
+      electronAPI?: {
+        getBackendStatus?: () => Promise<{ running?: boolean }>;
+        onBackendReady?: (cb: () => void) => () => void;
+        onBackendError?: (cb: (msg?: string) => void) => () => void;
+      };
+    }).electronAPI;
+    if (!api?.getBackendStatus) return;
+    let alive = true;
+    api.getBackendStatus()
+      .then((s) => { if (alive) setBackendUp(Boolean(s?.running)); })
+      .catch(() => {});
+    const offReady = api.onBackendReady?.(() => setBackendUp(true));
+    const offError = api.onBackendError?.(() => setBackendUp(false));
+    return () => {
+      alive = false;
+      offReady?.();
+      offError?.();
+    };
+  }, []);
 
   // ── 左下角用户区（参考 Trae 桌面版） ─────────────────────────────────
   // 桌面端多数场景是本地离线工作区，不强制登录；这里用裸 fetch 探测会话，
@@ -240,16 +361,18 @@ export default function DesktopWorkspacePage() {
     setLoading(true);
     try {
       const data = await apiFetch<{ projects: ProjectMeta[] }>("/api/v1/desktop/projects");
-      setProjects(data.projects || []);
-      if (!activeId && data.projects?.length) {
-        setActiveId(data.projects[0].id);
-      }
+      const list = data.projects || [];
+      setProjects(list);
+      // 上次选中的工程可能已被删除：此时回落到第一个工程。
+      setActiveId((prev) => (
+        prev && list.some((p) => p.id === prev) ? prev : (list[0]?.id ?? null)
+      ));
     } catch (e) {
       console.error("Failed to load projects", e);
     } finally {
       setLoading(false);
     }
-  }, [activeId]);
+  }, []);
 
   useEffect(() => {
     loadProjects();
@@ -297,20 +420,29 @@ export default function DesktopWorkspacePage() {
         if (cancelled) return;
         setTree(t.tree);
 
-        // 需求只有一份数据源：requirements/requirements.md。加载后直接选中它。
-        // 若该文件还不存在（工程刚创建），则让右侧展示空态。
+        // 需求只有一份数据源：requirements/requirements.md。
+        // 若上次退出时选中的文件仍存在，优先恢复到该文件；否则回落到需求文档。
         setSelectedFile(null);
         setFileContent("");
-        const reqPath = findArtifactPath(t.tree, "requirements/requirements.md");
-        if (reqPath) {
+        setFileNotice(null);
+        setHighlightLine(null);
+        setLineStart("");
+        setLineEnd("");
+        const preferred = restoredRef.current.activeId === activeId
+          ? restoredRef.current.selectedFile
+          : null;
+        const preferredPath = preferred ? findArtifactPath(t.tree, preferred) : null;
+        const targetPath = preferredPath || findArtifactPath(t.tree, "requirements/requirements.md");
+        if (targetPath) {
           try {
-            const f = await apiFetch<{ content: string }>(
-              `/api/v1/desktop/projects/${activeId}/artifacts/${encodeURIComponent(reqPath).replace(/%2F/g, "/")}`,
+            const f = await apiFetch<{ content: string; message?: string }>(
+              `/api/v1/desktop/projects/${activeId}/artifacts/${encodeURIComponent(targetPath).replace(/%2F/g, "/")}`,
             );
             if (cancelled) return;
-            setSelectedFile(reqPath);
+            setSelectedFile(targetPath);
             setFileContent(f.content || "");
-            setOpenSections((s) => ({ ...s, requirements: true }));
+            setFileNotice(f.message ?? null);
+            setOpenSections((s) => ({ ...s, [sectionOf(targetPath)]: true }));
           } catch { /* 读不到内容也没关系，文件路径存在就够了 */ }
         }
 
@@ -463,14 +595,14 @@ export default function DesktopWorkspacePage() {
   // ── Import requirements from file (native dialog) ──────────────────────
   const handleImportFile = async () => {
     if (!isDesktop) {
-      alert("文件导入仅在桌面端可用。");
+      pushAssistant("文件导入仅在桌面端可用。");
       return;
     }
     const path = await (window as any).electronAPI.openFile({ title: "导入需求文档" });
     if (!path) return;
     const res = await (window as any).electronAPI.readFile(path);
     if (!res.ok) {
-      alert(`读取失败: ${res.error}`);
+      pushAssistant(`读取失败: ${res.error}`);
       return;
     }
     setChatInput(res.content);
@@ -494,6 +626,9 @@ export default function DesktopWorkspacePage() {
 
   const submitReview = async (status: "approved" | "rejected" | "needs_revision") => {
     if (!activeId || !selectedFile) return;
+    const start = parseInt(lineStart, 10);
+    const end = parseInt(lineEnd, 10);
+    const hasRange = Number.isFinite(start) && start > 0;
     try {
       await apiFetch<{ review: typeof reviews[number] }>(
         `/api/v1/desktop/projects/${activeId}/review`,
@@ -503,10 +638,16 @@ export default function DesktopWorkspacePage() {
             artifact: selectedFile,
             status,
             comment: reviewComment.trim() || undefined,
+            line_start: hasRange ? start : undefined,
+            line_end: hasRange
+              ? (Number.isFinite(end) && end >= start ? end : start)
+              : undefined,
           }),
         },
       );
       setReviewComment("");
+      setLineStart("");
+      setLineEnd("");
       await loadReviews();
     } catch (e) {
       pushAssistant(`评审提交失败: ${(e as Error).message}`);
@@ -554,23 +695,79 @@ export default function DesktopWorkspacePage() {
   const reviewTones = useMemo(() => reviewToneByArtifact(reviews), [reviews]);
   const reviewCounts = useMemo(() => countReviewTones(reviewTones), [reviewTones]);
   const reviewedTotal = REVIEW_TONES.reduce((n, t) => n + reviewCounts[t], 0);
+  const latestReviews = useMemo(() => latestReviewByArtifact(reviews), [reviews]);
+  // 文件在评审后被修改 → 评审结论过期；筛选「待修订」时也会带上这些文件。
+  const stalePaths = useMemo(
+    () => staleArtifactsByTree(tree, latestReviews),
+    [tree, latestReviews],
+  );
+
+  // 窗口重新获得焦点 / 切回标签页时自动刷新产物树与评审，避免外部改动不可见。
+  useEffect(() => {
+    if (!activeId) return;
+    let last = 0;
+    const refresh = () => {
+      const now = Date.now();
+      if (now - last < 1500) return;
+      last = now;
+      apiFetch<{ tree: TreeNode }>(`/api/v1/desktop/projects/${activeId}/artifacts`)
+        .then((t) => setTree(t.tree))
+        .catch(() => {});
+      loadReviews();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [activeId, loadReviews]);
+
+  // 全文搜索：防抖 300ms，只在查询词 ≥ 2 字符时请求后端扫描产物。
+  useEffect(() => {
+    const q = query.trim();
+    if (!activeId || q.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    let alive = true;
+    const timer = window.setTimeout(() => {
+      apiFetch<{ matches: Array<{ path: string; line: number; text: string }> }>(
+        `/api/v1/desktop/projects/${activeId}/artifacts/search?q=${encodeURIComponent(q)}`,
+      )
+        .then((r) => { if (alive) setSearchResults(r.matches || []); })
+        .catch(() => { if (alive) setSearchResults([]); });
+    }, 300);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [activeId, query]);
 
   // ── Run pipeline ───────────────────────────────────────────────────────
-  const handleRunPipeline = async () => {
+  const handleRunPipeline = async (resumeFrom?: string) => {
     if (!activeId || running) return;
     setRunning(true);
+    setCancelling(false);
     setPollProgress(0);
     setPollStage(null);
+    const resumed = Boolean(resumeFrom);
     setChatMessages((m) => [...m, {
       role: "assistant",
-      content: "🚀 开始运行流水线，产出物将写入工程的 design/、code/、tests/、evidence/ 文件夹...",
+      content: resumed
+        ? `🔁 从失败阶段「${resumeFrom}」重试流水线...`
+        : "🚀 开始运行流水线，产出物将写入工程的 design/、code/、tests/、evidence/ 文件夹...",
       timestamp: new Date().toISOString(),
     }]);
     try {
       const res = await apiFetch<{ job_id: string; status: string; poll_url: string }>(
         `/api/v1/desktop/projects/${activeId}/pipeline/run`,
-        { method: "POST", body: JSON.stringify({ type: "full" }) },
+        { method: "POST", body: JSON.stringify({ type: "full", resume_from: resumeFrom }) },
       );
+      setRunJobId(res.job_id);
 
       // 用 poll_url（来自后端）拿真实状态，不再用 /pipeline/runs 磁盘记录。
       const pollUrl = res.poll_url || `/api/v1/desktop/projects/${activeId}/pipeline/status/${res.job_id}`;
@@ -593,29 +790,44 @@ export default function DesktopWorkspacePage() {
               : [...m, { role: "assistant", content: `📋 ${tail}`, timestamp: new Date().toISOString() }]);
           }
 
-          if (s.status === "passed" || s.status === "failed") {
+          if (s.status === "passed" || s.status === "failed" || s.status === "cancelled") {
             window.clearInterval(pollTimer);
             setRunning(false);
+            setCancelling(false);
+            setRunJobId(null);
             setPollProgress(0);
             setPollStage(null);
-            // 刷新 runs 列表和产物树
-            const [, runList] = await Promise.all([
-              apiFetch<{ tree: TreeNode }>(`/api/v1/desktop/projects/${activeId}/artifacts`).then((t) => setTree(t.tree)).catch(() => {}),
-              apiFetch<{ runs: PipelineRun[] }>(`/api/v1/desktop/projects/${activeId}/pipeline/runs`).then((r) => setRuns(r.runs || [])).catch(() => {}),
+            // 刷新 runs 列表、产物树和评审标记
+            await Promise.all([
+              apiFetch<{ tree: TreeNode }>(`/api/v1/desktop/projects/${activeId}/artifacts`)
+                .then((t) => setTree(t.tree)).catch(() => {}),
+              apiFetch<{ runs: PipelineRun[] }>(`/api/v1/desktop/projects/${activeId}/pipeline/runs`)
+                .then((r) => setRuns(r.runs || [])).catch(() => {}),
             ]);
+            loadReviews();
             if (s.status === "passed") {
+              const content = `✅ 流水线完成 (${res.job_id})。产出物已保存到工程文件夹，可在左侧文件树查看。`;
+              setChatMessages((m) => [...m, {
+                role: "assistant", content, timestamp: new Date().toISOString(),
+              }]);
+              notifyDesktop("yuleOSH 流水线完成", `工程 ${activeProject?.name || activeId} 已全部通过`);
+            } else if (s.status === "cancelled") {
               setChatMessages((m) => [...m, {
                 role: "assistant",
-                content: `✅ 流水线完成 (${res.job_id})。产出物已保存到工程文件夹，可在左侧文件树查看。`,
+                content: `⏹ 流水线已取消 (${res.job_id})。已完成的阶段产物保留在工程目录。`,
                 timestamp: new Date().toISOString(),
               }]);
+              notifyDesktop("yuleOSH 流水线已取消", `工程 ${activeProject?.name || activeId}`);
             } else {
               const err = s.result?.error || s.result?.summary || "未知错误";
+              const failedStage = s.stages?.find((st) => st.status === "failed")?.key;
               setChatMessages((m) => [...m, {
                 role: "assistant",
-                content: `❌ 流水线失败 (${res.job_id})：${err}`,
+                content: `❌ 流水线失败 (${res.job_id})：${err}`
+                  + (failedStage ? `\n可在运行详情里从阶段「${failedStage}」重试。` : ""),
                 timestamp: new Date().toISOString(),
               }]);
+              notifyDesktop("yuleOSH 流水线失败", `工程 ${activeProject?.name || activeId}：${err}`);
             }
           }
         } catch { /* 轮询中途报错忽略，下一轮继续 */ }
@@ -625,11 +837,15 @@ export default function DesktopWorkspacePage() {
       window.setTimeout(() => {
         window.clearInterval(pollTimer);
         setRunning(false);
+        setCancelling(false);
+        setRunJobId(null);
         setPollProgress(0);
         setPollStage(null);
       }, 300000);
     } catch (e) {
       setRunning(false);
+      setCancelling(false);
+      setRunJobId(null);
       setPollProgress(0);
       setPollStage(null);
       setChatMessages((m) => [...m, {
@@ -637,6 +853,22 @@ export default function DesktopWorkspacePage() {
         content: `流水线启动失败: ${(e as Error).message}`,
         timestamp: new Date().toISOString(),
       }]);
+    }
+  };
+
+  // ── Cancel running pipeline ────────────────────────────────────────────
+  const handleCancelPipeline = async () => {
+    if (!activeId || !runJobId || cancelling) return;
+    setCancelling(true);
+    try {
+      await apiFetch(`/api/v1/desktop/projects/${activeId}/pipeline/cancel`, {
+        method: "POST",
+        body: JSON.stringify({ job_id: runJobId }),
+      });
+      pushAssistant("⏹ 已请求取消流水线，将在当前阶段结束后停止。");
+    } catch (e) {
+      setCancelling(false);
+      pushAssistant(`取消失败: ${(e as Error).message}`);
     }
   };
 
@@ -718,22 +950,63 @@ export default function DesktopWorkspacePage() {
   const handleSelectFile = async (relPath: string) => {
     if (!activeId) return;
     setSelectedFile(relPath);
+    setHighlightLine(null);
+    setLineStart("");
+    setLineEnd("");
     // 展开该文件所属分区（若未展开）
     const section = sectionOf(relPath);
     if (section && !openSections[section]) {
       setOpenSections((s) => ({ ...s, [section]: true }));
     }
     try {
-      const res = await apiFetch<{ content: string | null; binary: boolean; message?: string }>(
+      const res = await apiFetch<{
+        content: string | null; binary: boolean; message?: string; truncated?: boolean;
+      }>(
         `/api/v1/desktop/projects/${activeId}/artifacts/${encodeURIComponent(relPath).replace(/%2F/g, "/")}`,
       );
       setFileContent(res.binary ? res.message || "(二进制文件)" : res.content || "");
+      setFileNotice(res.truncated ? (res.message || "文件过大，仅显示部分内容") : null);
     } catch (e) {
       setFileContent(`读取失败: ${(e as Error).message}`);
+      setFileNotice(null);
+    }
+  };
+
+  const copySelectedPath = async () => {
+    if (!selectedFile) return;
+    try {
+      await navigator.clipboard.writeText(selectedFile);
+      setCopiedPath(true);
+      window.setTimeout(() => setCopiedPath(false), 1500);
+    } catch {
+      pushAssistant("复制路径失败：当前环境不允许访问剪贴板。");
+    }
+  };
+
+  const revealSelectedFile = async () => {
+    if (!activeId || !selectedFile) return;
+    const api = (window as any).electronAPI;
+    if (!api?.revealArtifact) {
+      pushAssistant("「在文件管理器中显示」仅在桌面端可用。");
+      return;
+    }
+    const res = await api.revealArtifact(activeId, selectedFile);
+    if (!res?.ok) {
+      pushAssistant(`无法在文件管理器中显示: ${res?.error || "未知错误"}`);
     }
   };
 
   const artifactFiles = useMemo(() => flattenFiles(tree), [tree]);
+
+  // 预览行高亮：优先使用评审行范围，其次是全文搜索命中行。
+  const reviewLineRange = (() => {
+    const start = parseInt(lineStart, 10);
+    const end = parseInt(lineEnd || lineStart, 10);
+    if (!Number.isFinite(start) || start <= 0) return null;
+    return { start, end: Number.isFinite(end) && end >= start ? end : start };
+  })();
+  const previewLineRange = reviewLineRange
+    ?? (highlightLine ? { start: highlightLine, end: highlightLine } : null);
 
   return (
     <div className="flex flex-col h-screen bg-[#0a0e17] text-[#e2e8f0] overflow-hidden">
@@ -768,6 +1041,16 @@ export default function DesktopWorkspacePage() {
           />
         </div>
         <div className="flex items-center gap-2">
+          {backendUp === false && (
+            <span
+              data-testid="backend-offline"
+              title="Python 后端未就绪，请点击「重试启动」或稍候"
+              className="flex items-center gap-1 rounded-full border border-[#ef4444]/40 bg-[#ef4444]/10 px-2 py-0.5 text-[11px] text-[#f87171]"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-[#ef4444]" />
+              后端离线
+            </span>
+          )}
           <SyncStatusChip status={syncStatus} onSync={handleSync} disabled={!activeId || syncing} />
           <Button
             variant="outline"
@@ -790,7 +1073,7 @@ export default function DesktopWorkspacePage() {
             <Search className="h-4 w-4" />
           </button>
           <GovernanceMenu disabled={!activeId} onSelect={handleGovernanceSelect} />
-          <Button size="sm" onClick={handleRunPipeline} disabled={!activeId || running}
+          <Button size="sm" onClick={() => handleRunPipeline()} disabled={!activeId || running}
             className="bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white">
             {running ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Play className="w-4 h-4 mr-1" />}
             运行流水线
@@ -804,6 +1087,16 @@ export default function DesktopWorkspacePage() {
               <span className="text-xs text-[#f59e0b] tabular-nums">
                 {pollProgress}% {pollStage ? `· ${pollStage}` : ""}
               </span>
+              <button
+                type="button"
+                data-testid="cancel-run"
+                onClick={() => void handleCancelPipeline()}
+                disabled={cancelling || !runJobId}
+                title="取消运行（在当前阶段结束后停止）"
+                className="rounded border border-[#7f1d1d] px-1.5 py-0.5 text-[11px] text-[#f87171] transition-colors hover:bg-[#7f1d1d]/30 disabled:opacity-50"
+              >
+                {cancelling ? "取消中…" : "取消"}
+              </button>
             </div>
           )}
         </div>
@@ -851,6 +1144,20 @@ export default function DesktopWorkspacePage() {
                 <Filter className="w-3 h-3" /> 有产物
               </button>
             </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] text-[#64748b] shrink-0">评审</span>
+              <select
+                data-testid="review-filter"
+                value={reviewFilter}
+                onChange={(e) => setReviewFilter(e.target.value as ReviewFilter)}
+                className="min-w-0 flex-1 rounded border border-[#1e293b] bg-[#111827] px-1.5 py-0.5 text-[11px] text-[#94a3b8] focus:border-[#1677ff] focus:outline-none"
+              >
+                <option value="all">全部状态</option>
+                <option value="needs_revision">待修订 / 已过期</option>
+                <option value="unreviewed">未评审</option>
+                <option value="approved">已通过</option>
+              </select>
+            </div>
             {reviewedTotal > 0 && (
               <div
                 data-testid="review-legend"
@@ -864,6 +1171,41 @@ export default function DesktopWorkspacePage() {
                     <span className="tabular-nums text-[#475569]">{reviewCounts[tone]}</span>
                   </span>
                 ))}
+                {stalePaths.size > 0 && (
+                  <span data-testid="stale-summary" className="flex items-center gap-1 text-[#f59e0b]">
+                    <AlertTriangle className="h-3 w-3" />
+                    过期 <span className="tabular-nums">{stalePaths.size}</span>
+                  </span>
+                )}
+              </div>
+            )}
+            {searchResults.length > 0 && (
+              <div
+                data-testid="artifact-search-results"
+                className="overflow-hidden rounded border border-[#1e293b] bg-[#111827]"
+              >
+                <div className="border-b border-[#1e293b] px-2 py-1 text-[10px] text-[#64748b]">
+                  内容命中 {searchResults.length} 条 · 点击跳转
+                </div>
+                <div className="max-h-40 overflow-y-auto">
+                  {searchResults.slice(0, 20).map((hit, i) => (
+                    <button
+                      key={`${hit.path}:${hit.line}:${i}`}
+                      type="button"
+                      onClick={async () => {
+                        setQuery("");
+                        await handleSelectFile(hit.path);
+                        setHighlightLine(hit.line);
+                      }}
+                      className="block w-full px-2 py-1 text-left hover:bg-[#1e293b]/60"
+                    >
+                      <div className="truncate font-mono text-[10px] text-[#93c5fd]">
+                        {hit.path}:{hit.line}
+                      </div>
+                      <div className="truncate text-[10px] text-[#64748b]">{hit.text}</div>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -872,12 +1214,24 @@ export default function DesktopWorkspacePage() {
           <div className="flex-1 overflow-y-auto px-1 pb-2">
             {(() => {
               const sections = buildSections(tree).map((sec) => {
-                const filtered = filterTree(sec, query);
-                return { sec, filtered, count: countFiles(filtered) };
-              }).filter(({ count }) => !onlyWithFiles || count > 0);
-              if (sections.length === 0) return <div className="px-2 py-4 text-xs text-[#475569] text-center">暂无产物</div>;
+                const allFiles = flattenFiles(sec);
+                const coverage = reviewCoverage(allFiles, reviewTones);
+                const aggregate = aggregateReviewTone(allFiles.map((p) => reviewTones[p]));
+                const filtered = filterTreeByPaths(
+                  filterTree(sec, query),
+                  (path) => matchesReviewFilter(path, reviewTones, reviewFilter, stalePaths),
+                );
+                return { sec, filtered, count: countFiles(filtered), coverage, aggregate };
+              }).filter(({ count }) => (reviewFilter !== "all" ? count > 0 : (!onlyWithFiles || count > 0)));
+              if (sections.length === 0) {
+                return (
+                  <div className="px-2 py-4 text-xs text-[#475569] text-center">
+                    {reviewFilter !== "all" ? "没有符合评审筛选的产物" : "暂无产物"}
+                  </div>
+                );
+              }
 
-              return sections.map(({ sec, filtered, count }) => {
+              return sections.map(({ sec, filtered, count, coverage, aggregate }) => {
                 const isOpen = query.trim() ? true : (openSections[sec.name] ?? true);
                 const meta = sectionMeta(sec.name);
                 const Icon = meta.icon;
@@ -906,6 +1260,22 @@ export default function DesktopWorkspacePage() {
                       {isOpen ? <ChevronDown className="w-3 h-3 shrink-0" /> : <ChevronRight className="w-3 h-3 shrink-0" />}
                       <Icon className={`w-3.5 h-3.5 shrink-0 ${meta.warn ? "text-[#f59e0b]" : ""}`} />
                       <span className={`flex-1 text-left ${meta.warn ? "text-[#fbbf24]" : ""}`}>{meta.label}</span>
+                      {aggregate && (
+                        <span
+                          data-testid={`section-review-dot-${sec.name}`}
+                          title={`分区评审：${REVIEW_TONE_META[aggregate].label}`}
+                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${REVIEW_TONE_META[aggregate].dot}`}
+                        />
+                      )}
+                      {coverage.reviewed > 0 && (
+                        <span
+                          data-testid={`section-review-coverage-${sec.name}`}
+                          className="shrink-0 text-[10px] tabular-nums text-[#64748b]"
+                          title={`已评审 ${coverage.reviewed} / ${coverage.total} 个产物`}
+                        >
+                          {coverage.reviewed}/{coverage.total}
+                        </span>
+                      )}
                       <span className={`text-[10px] tabular-nums ${count === 0 ? "text-[#475569]" : meta.warn ? "text-[#f59e0b]" : "text-[#64748b]"}`}>{count}</span>
                     </button>
                     {meta.hint && isOpen && count > 0 && (
@@ -918,6 +1288,7 @@ export default function DesktopWorkspacePage() {
                         onSelect={handleSelectFile}
                         selectedFile={selectedFile}
                         reviewTones={reviewTones}
+                        stalePaths={stalePaths}
                       />
                     )}
                   </div>
@@ -1114,7 +1485,40 @@ export default function DesktopWorkspacePage() {
           {/* Content pane — unified */}
           <div className="flex-1 flex flex-col overflow-hidden">
             {selectedFile ? (
-              <CodeBlock content={fileContent} path={selectedFile} />
+              <CodeBlock
+                content={fileContent}
+                path={selectedFile}
+                notice={fileNotice}
+                lineRange={previewLineRange}
+                onLineClick={(line) => {
+                  setHighlightLine(null);
+                  setLineStart(String(line));
+                  setLineEnd(String(line));
+                }}
+                actions={(
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void copySelectedPath()}
+                      title="复制相对路径"
+                      className="inline-flex items-center gap-1 rounded border border-[#1e293b] px-1.5 py-0.5 text-[10px] text-[#94a3b8] hover:text-white"
+                    >
+                      <Copy className="h-3 w-3" /> {copiedPath ? "已复制" : "复制路径"}
+                    </button>
+                    {isDesktop && (
+                      <button
+                        type="button"
+                        data-testid="reveal-in-folder"
+                        onClick={() => void revealSelectedFile()}
+                        title="在文件管理器中显示"
+                        className="inline-flex items-center gap-1 rounded border border-[#1e293b] px-1.5 py-0.5 text-[10px] text-[#94a3b8] hover:text-white"
+                      >
+                        <FolderOpen className="h-3 w-3" /> 定位
+                      </button>
+                    )}
+                  </>
+                )}
+              />
             ) : (
               <div className="flex-1 flex items-center justify-center text-center px-8">
                 <div className="space-y-2">
@@ -1130,6 +1534,15 @@ export default function DesktopWorkspacePage() {
             {/* Review panel —挂在底部，与文件内容解耦 */}
             {selectedFile && (
               <div className="border-t border-[#1e293b] bg-[#0d111f] shrink-0 px-4 py-3 space-y-2">
+                {stalePaths.has(selectedFile) && (
+                  <div
+                    data-testid="stale-banner"
+                    className="flex items-center gap-1.5 rounded border border-[#f59e0b]/40 bg-[#f59e0b]/10 px-2 py-1 text-[11px] text-[#fbbf24]"
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    该文件在最近一次评审后被修改，评审结论可能已过期，请重新确认。
+                  </div>
+                )}
                 {(() => {
                   const mine = reviews.filter((r) => r.artifact === selectedFile);
                   if (mine.length === 0) return null;
@@ -1147,6 +1560,11 @@ export default function DesktopWorkspacePage() {
                             "border-[#f59e0b]/40 text-[#fbbf24] bg-[#f59e0b]/10"
                           }`}>
                           {r.status === "approved" ? "✅ 通过" : r.status === "rejected" ? "❌ 退回" : "🔍 修改"}
+                          {r.line_start ? (
+                            <span className="text-[#93c5fd]">
+                              L{r.line_start}{r.line_end && r.line_end !== r.line_start ? `-${r.line_end}` : ""}
+                            </span>
+                          ) : null}
                           {r.comment && <span className="truncate max-w-[120px] text-[#94a3b8]">· {r.comment}</span>}
                         </span>
                       ))}
@@ -1178,6 +1596,39 @@ export default function DesktopWorkspacePage() {
                     className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded border border-[#64748b]/40 text-[#94a3b8] hover:bg-[#1e293b] ml-auto">
                     📄 导出评审报告
                   </button>
+                </div>
+
+                <div className="flex items-center gap-2 text-[11px] text-[#64748b]">
+                  <span className="shrink-0">行范围</span>
+                  <Input
+                    value={lineStart}
+                    onChange={(e) => setLineStart(e.target.value.replace(/[^\d]/g, ""))}
+                    placeholder="起始"
+                    inputMode="numeric"
+                    aria-label="评审起始行"
+                    data-testid="review-line-start"
+                    className="bg-[#111827] border-[#1e293b] text-xs h-7 w-16"
+                  />
+                  <span>–</span>
+                  <Input
+                    value={lineEnd}
+                    onChange={(e) => setLineEnd(e.target.value.replace(/[^\d]/g, ""))}
+                    placeholder="结束"
+                    inputMode="numeric"
+                    aria-label="评审结束行"
+                    data-testid="review-line-end"
+                    className="bg-[#111827] border-[#1e293b] text-xs h-7 w-16"
+                  />
+                  {(lineStart || lineEnd) && (
+                    <button
+                      type="button"
+                      onClick={() => { setLineStart(""); setLineEnd(""); }}
+                      className="rounded px-1.5 py-0.5 hover:bg-[#1e293b]"
+                    >
+                      清除
+                    </button>
+                  )}
+                  <span className="ml-auto text-[10px] text-[#475569]">点击预览行号可快速定位</span>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -1338,9 +1789,9 @@ export default function DesktopWorkspacePage() {
         projectId={activeId}
         jobId={runDetailJob}
         running={running}
-        onRerun={() => {
+        onRerun={(fromStage) => {
           setRunDetailJob(null);
-          handleRunPipeline();
+          handleRunPipeline(fromStage);
         }}
         onInspectLayer={(layerPath) => {
           const prefix = `code/${layerPath}/`;
@@ -1458,6 +1909,7 @@ function ArtifactTreeLite({
   onSelect,
   selectedFile,
   reviewTones,
+  stalePaths,
 }: {
   nodes: TreeNode[];
   depth?: number;
@@ -1465,6 +1917,8 @@ function ArtifactTreeLite({
   selectedFile: string | null;
   /** 产物路径 → 最新评审状态色，未评审的文件不显示圆点。 */
   reviewTones?: Record<string, ReviewTone>;
+  /** 评审结论已过期的文件集合（文件在评审后被修改）。 */
+  stalePaths?: Set<string>;
 }) {
   // 目录默认不展开（分区已展开后，再逐层展开文件）
   const [openDirs, setOpenDirs] = useState<Record<string, boolean>>({});
@@ -1476,6 +1930,10 @@ function ArtifactTreeLite({
         const isOpen = openDirs[node.path] ?? false;
         const hasChildren = isDir && (node.children?.length ?? 0) > 0;
         const tone = isDir ? null : reviewTones?.[node.path];
+        const dirTone = isDir
+          ? aggregateReviewTone(flattenFiles(node).map((p) => reviewTones?.[p]))
+          : null;
+        const stale = !isDir && Boolean(stalePaths?.has(node.path));
         return (
           <div key={node.path}>
             <div
@@ -1502,6 +1960,23 @@ function ArtifactTreeLite({
                 <FileIcon className="w-3 h-3 text-[#64748b]" />
               )}
               <span className="min-w-0 flex-1 truncate">{node.name}</span>
+              {dirTone && (
+                <span
+                  data-testid={`dir-review-dot-${node.path}`}
+                  title={`目录评审：${REVIEW_TONE_META[dirTone].label}`}
+                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${REVIEW_TONE_META[dirTone].dot}`}
+                />
+              )}
+              {stale && (
+                <span
+                  data-testid={`review-stale-${node.path}`}
+                  title="评审后文件已修改，评审结论可能过期"
+                  aria-label="评审结论已过期"
+                  className="shrink-0"
+                >
+                  <AlertTriangle className="h-3 w-3 text-[#f59e0b]" />
+                </span>
+              )}
               {tone && (
                 <span
                   data-testid={`review-dot-${node.path}`}
@@ -1518,6 +1993,7 @@ function ArtifactTreeLite({
                 onSelect={onSelect}
                 selectedFile={selectedFile}
                 reviewTones={reviewTones}
+                stalePaths={stalePaths}
               />
             )}
           </div>

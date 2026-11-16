@@ -157,6 +157,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   /** 判断当前是否运行在 Electron 桌面环境 */
   isDesktop: true,
 
+  /**
+   * 在系统文件管理器中显示工程产物
+   * @param {string} projectId
+   * @param {string} relPath 工程内相对路径，如 code/src/App.c
+   * @returns {Promise<{ok:boolean, path?:string, error?:string}>}
+   */
+  revealArtifact: (projectId, relPath) => ipcRenderer.invoke('reveal-artifact', projectId, relPath),
+
+  /**
+   * 发送桌面通知（窗口在前台时主进程会忽略）
+   * @param {{title?:string, body?:string}} payload
+   * @returns {Promise<boolean>}
+   */
+  notify: (payload) => ipcRenderer.invoke('show-notification', payload),
+
   // ─── 应用信息 ─────────────────────────────────────
 
   /** @returns {Promise<string>} 应用版本号 */

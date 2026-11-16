@@ -94,6 +94,7 @@ def submit_pipeline(project_dir: str, layer: int = 1, org_id: int = 0,
         "completed_at": None,
         "result": None,
         "logs": [],
+        "cancel_requested": False,
     }
     pool = _get_pool()
     pool.submit(_run_ci_job, job_id, project_dir, layer, org_id, user_id, user_email)
@@ -107,6 +108,7 @@ def submit_full_pipeline(
     org_id: int = 0,
     user_id: int | None = None,
     user_email: str | None = None,
+    resume_from: Optional[str] = None,
 ) -> str:
     """Submit a full yuleOSH pipeline (RTE → CI → MISRA) with optional config.
     
@@ -116,6 +118,7 @@ def submit_full_pipeline(
         arxml_content: Optional ARXML string.
         org_id: 消费计量归属组织（Portal 方案 B, 2026-08-10；默认 0 不计量）。
         user_id/user_email: 用户归因（Phase 9, 2026-08-10；CLI 为 None）。
+        resume_from: 失败重试时从该阶段开始，之前的阶段标记为 skipped。
     
     Returns: job_id for status polling.
     """
@@ -139,10 +142,12 @@ def submit_full_pipeline(
         "completed_at": None,
         "result": None,
         "logs": [],
+        "cancel_requested": False,
+        "resume_from": resume_from,
     }
     pool = _get_pool()
     pool.submit(_run_full_pipeline, job_id, project_dir, config_json, arxml_content,
-                org_id, user_id, user_email)
+                org_id, user_id, user_email, resume_from)
     return job_id
 
 
@@ -169,6 +174,75 @@ def _update_stage(job_id: str, stage_key: str, status: str, progress: int = None
         job["updated_at"] = datetime.now().isoformat()
 
 
+# ── Cancellation / stage resume ───────────────────────────────────────────
+
+_STAGE_KEYS = [s["key"] for s in FULL_PIPELINE_STAGES]
+
+
+class _PipelineCancelled(Exception):
+    """用户在阶段边界请求取消。"""
+
+
+def _stage_index(stage_key: Optional[str]) -> int:
+    """把阶段 key 转成下标；未知/空值从第一个阶段开始。"""
+    try:
+        return _STAGE_KEYS.index(stage_key)  # type: ignore[arg-type]
+    except (ValueError, TypeError):
+        return 0
+
+
+def _skip_stage(job_id: str, stage_key: str, start_idx: int) -> bool:
+    """失败重试时跳过 resume_from 之前的阶段。"""
+    if _stage_index(stage_key) < start_idx:
+        _update_stage(job_id, stage_key, "skipped")
+        return True
+    return False
+
+
+def _raise_if_cancelled(job_id: str) -> None:
+    """在阶段边界检查取消标记（协作式取消，不强杀线程）。"""
+    job = _PIPELINE_JOBS.get(job_id)
+    if job and job.get("cancel_requested"):
+        raise _PipelineCancelled(job_id)
+
+
+def _mark_cancelled(job: dict, job_id: str) -> None:
+    """把任务与阶段状态收敛到 cancelled，未开始的阶段标记 skipped。"""
+    job["status"] = "cancelled"
+    job["result"] = {
+        "cancelled": True,
+        "summary": f"Cancelled at stage: {job.get('current_stage', 'unknown')}",
+    }
+    for stage in job.get("stages", []):
+        if stage.get("status") == "running":
+            stage["status"] = "cancelled"
+        elif stage.get("status") == "pending":
+            stage["status"] = "skipped"
+    _append_log(job_id, "⏹ Pipeline cancelled by user.")
+
+
+def request_cancel(job_id: str) -> bool:
+    """请求取消一个排队中/运行中的任务。
+
+    运行中的任务会在下一个阶段边界退出；排队中的任务立即标记为 cancelled。
+    已完成的任务返回 False。
+    """
+    job = _PIPELINE_JOBS.get(job_id)
+    if not job:
+        return False
+    if job.get("status") in ("passed", "failed", "cancelled"):
+        return False
+    job["cancel_requested"] = True
+    job["updated_at"] = datetime.now().isoformat()
+    _append_log(job_id, "Cancellation requested; stopping at next stage boundary.")
+    if job.get("status") == "queued":
+        _mark_cancelled(job, job_id)
+        job["progress"] = 100
+        job["completed_at"] = datetime.now().isoformat()
+        _persist_job_result(job)
+    return True
+
+
 def _run_ci_job(job_id: str, project_dir: str, layer: int, org_id: int = 0,
                 user_id: int | None = None, user_email: str | None = None):
     """Execute CI layer in background thread.
@@ -180,6 +254,9 @@ def _run_ci_job(job_id: str, project_dir: str, layer: int, org_id: int = 0,
     """
     job = _PIPELINE_JOBS.get(job_id)
     if not job:
+        return
+    # 排队期间已被取消：直接退出，避免覆盖 cancelled 状态。
+    if job.get("status") == "cancelled":
         return
     job["status"] = "running"
     job["started_at"] = datetime.now().isoformat()
@@ -202,8 +279,11 @@ def _run_ci_job(job_id: str, project_dir: str, layer: int, org_id: int = 0,
             from yuleosh.ci.run import run_all as _ra
             _append_log(job_id, "Running all CI layers...")
             job["result"] = str(_ra(project_dir) or "ok")
-        job["status"] = "passed"
-        _append_log(job_id, "CI Layer completed successfully.")
+        if job.get("cancel_requested"):
+            _mark_cancelled(job, job_id)
+        else:
+            job["status"] = "passed"
+            _append_log(job_id, "CI Layer completed successfully.")
     except Exception as e:
         # P1-8: explicit failure — no simulated pass under any circumstance.
         log.error("CI layer %s failed for job %s: %s", layer, job_id, e, exc_info=True)
@@ -342,10 +422,14 @@ def _run_full_pipeline(
     org_id: int = 0,
     user_id: int | None = None,
     user_email: str | None = None,
+    resume_from: Optional[str] = None,
 ):
     """Execute full pipeline (ARXML parse → validate → RTE → CI → MISRA)."""
     job = _PIPELINE_JOBS.get(job_id)
     if not job:
+        return
+    # 排队期间已被取消：直接退出，避免覆盖 cancelled 状态。
+    if job.get("status") == "cancelled":
         return
 
     job["status"] = "running"
@@ -353,138 +437,156 @@ def _run_full_pipeline(
     _append_log(job_id, "=== yuleOSH Full Pipeline Started ===")
 
     total_stages = len(FULL_PIPELINE_STAGES)
+    start_idx = _stage_index(resume_from)
+    if start_idx > 0:
+        _append_log(job_id, f"Resuming from stage '{resume_from}'; earlier stages skipped.")
+
+    arxml_dir = Path(project_dir) / ".yuleosh" / "pipeline" / job_id
+    cfg_dir = arxml_dir
 
     try:
         # Stage 1: ARXML Parse
-        _update_stage(job_id, "arxml_parse", "running")
-        _append_log(job_id, "Stage 1/6: Parsing ARXML configuration...")
-        time.sleep(0.5)
+        if not _skip_stage(job_id, "arxml_parse", start_idx):
+            _raise_if_cancelled(job_id)
+            _update_stage(job_id, "arxml_parse", "running")
+            _append_log(job_id, "Stage 1/7: Parsing ARXML configuration...")
+            time.sleep(0.5)
 
-        if arxml_content:
-            # Save ARXML to temp file for pipeline processing
-            arxml_dir = Path(project_dir) / ".yuleosh" / "pipeline" / job_id
-            arxml_dir.mkdir(parents=True, exist_ok=True)
-            arxml_path = arxml_dir / "config.arxml"
-            arxml_path.write_text(arxml_content)
-            _append_log(job_id, f"ARXML saved to {arxml_path}")
-        elif config_json:
-            cfg_dir = Path(project_dir) / ".yuleosh" / "pipeline" / job_id
-            cfg_dir.mkdir(parents=True, exist_ok=True)
-            cfg_path = cfg_dir / "config.json"
-            cfg_path.write_text(config_json)
-            _append_log(job_id, f"Config JSON saved to {cfg_path}")
-        else:
-            _append_log(job_id, "No config provided, using existing project files.")
+            if arxml_content:
+                # Save ARXML to temp file for pipeline processing
+                arxml_dir.mkdir(parents=True, exist_ok=True)
+                arxml_path = arxml_dir / "config.arxml"
+                arxml_path.write_text(arxml_content)
+                _append_log(job_id, f"ARXML saved to {arxml_path}")
+            elif config_json:
+                cfg_dir.mkdir(parents=True, exist_ok=True)
+                cfg_path = cfg_dir / "config.json"
+                cfg_path.write_text(config_json)
+                _append_log(job_id, f"Config JSON saved to {cfg_path}")
+            else:
+                _append_log(job_id, "No config provided, using existing project files.")
 
-        _update_stage(job_id, "arxml_parse", "passed", int(15 / total_stages * 100))
+            _update_stage(job_id, "arxml_parse", "passed", int(15 / total_stages * 100))
 
         # Stage 2: Config Validation
-        _update_stage(job_id, "config_validate", "running")
-        _append_log(job_id, "Stage 2/6: Validating configuration...")
-        try:
-            from yuleosh.pipeline.config_validator import validate_pipeline_config
-            vresult = validate_pipeline_config(
-                project_dir=project_dir,
-                config_json=config_json,
-                arxml_content=arxml_content,
-            )
-            if not vresult["valid"]:
-                _append_log(job_id, f"Validation issues found: {len(vresult['issues'])}")
-                for issue in vresult["issues"][:5]:
-                    _append_log(job_id, f"  ⚠ {issue}")
-            else:
-                _append_log(job_id, "Configuration valid.")
-        except ImportError:
-            _append_log(job_id, "Config validator not available (skipping).")
+        if not _skip_stage(job_id, "config_validate", start_idx):
+            _raise_if_cancelled(job_id)
+            _update_stage(job_id, "config_validate", "running")
+            _append_log(job_id, "Stage 2/7: Validating configuration...")
+            try:
+                from yuleosh.pipeline.config_validator import validate_pipeline_config
+                vresult = validate_pipeline_config(
+                    project_dir=project_dir,
+                    config_json=config_json,
+                    arxml_content=arxml_content,
+                )
+                if not vresult["valid"]:
+                    _append_log(job_id, f"Validation issues found: {len(vresult['issues'])}")
+                    for issue in vresult["issues"][:5]:
+                        _append_log(job_id, f"  ⚠ {issue}")
+                else:
+                    _append_log(job_id, "Configuration valid.")
+            except ImportError:
+                _append_log(job_id, "Config validator not available (skipping).")
 
-        _update_stage(job_id, "config_validate", "passed", int(30 / total_stages * 100))
+            _update_stage(job_id, "config_validate", "passed", int(30 / total_stages * 100))
 
         # Stage 3: yuleOSH LLM code generation — pipeline rules are mandatory.
-        _update_stage(job_id, "code_generate", "running")
-        _append_log(job_id, "Stage 3/7: Generating AUTOSAR-layered code with yuleOSH LLM...")
-        run_config = json.loads(config_json) if config_json else {}
-        codegen_report = _stage_code_generation(project_dir, job_id, run_config)
-        _append_log(job_id, f"Code generation verified. Report: {codegen_report}")
-        _update_stage(job_id, "code_generate", "passed", int(45 / total_stages * 100))
+        if not _skip_stage(job_id, "code_generate", start_idx):
+            _raise_if_cancelled(job_id)
+            _update_stage(job_id, "code_generate", "running")
+            _append_log(job_id, "Stage 3/7: Generating AUTOSAR-layered code with yuleOSH LLM...")
+            run_config = json.loads(config_json) if config_json else {}
+            codegen_report = _stage_code_generation(project_dir, job_id, run_config)
+            _append_log(job_id, f"Code generation verified. Report: {codegen_report}")
+            _update_stage(job_id, "code_generate", "passed", int(45 / total_stages * 100))
 
         # Stage 4: RTE Generate
-        _update_stage(job_id, "rte_generate", "running")
-        _append_log(job_id, "Stage 4/7: Generating RTE code...")
-        try:
-            from yuleosh.autosar import rte_generator
-            rte_dir = Path(project_dir) / ".yuleosh" / "pipeline" / job_id / "rte"
-            rte_dir.mkdir(parents=True, exist_ok=True)
-            output = rte_generator.generate(
-                output_dir=str(rte_dir),
-                arxml_path=str(arxml_dir / "config.arxml") if arxml_content else None,
-                config_path=str(cfg_dir / "config.json") if config_json else None,
-            )
-            generated_files = output.get("files", [])
-            _append_log(job_id, f"RTE generated: {len(generated_files)} files")
-        except ImportError:
-            _append_log(job_id, "RTE generator not available yet (mock stage).")
-            # Create mock RTE files for demo
-            rte_dir = Path(project_dir) / ".yuleosh" / "pipeline" / job_id / "rte"
-            rte_dir.mkdir(parents=True, exist_ok=True)
-            (rte_dir / "Rte.c").write_text("// RTE generated by yuleOSH\n")
-            (rte_dir / "Rte.h").write_text("// RTE header generated by yuleOSH\n")
-            (rte_dir / "Rte_Swc.h").write_text("// SWC header generated by yuleOSH\n")
-            _append_log(job_id, "Mock RTE files created (Rte.c, Rte.h, Rte_Swc.h).")
+        if not _skip_stage(job_id, "rte_generate", start_idx):
+            _raise_if_cancelled(job_id)
+            _update_stage(job_id, "rte_generate", "running")
+            _append_log(job_id, "Stage 4/7: Generating RTE code...")
+            try:
+                from yuleosh.autosar import rte_generator
+                rte_dir = Path(project_dir) / ".yuleosh" / "pipeline" / job_id / "rte"
+                rte_dir.mkdir(parents=True, exist_ok=True)
+                output = rte_generator.generate(
+                    output_dir=str(rte_dir),
+                    arxml_path=str(arxml_dir / "config.arxml") if arxml_content else None,
+                    config_path=str(cfg_dir / "config.json") if config_json else None,
+                )
+                generated_files = output.get("files", [])
+                _append_log(job_id, f"RTE generated: {len(generated_files)} files")
+            except ImportError:
+                _append_log(job_id, "RTE generator not available yet (mock stage).")
+                # Create mock RTE files for demo
+                rte_dir = Path(project_dir) / ".yuleosh" / "pipeline" / job_id / "rte"
+                rte_dir.mkdir(parents=True, exist_ok=True)
+                (rte_dir / "Rte.c").write_text("// RTE generated by yuleOSH\n")
+                (rte_dir / "Rte.h").write_text("// RTE header generated by yuleOSH\n")
+                (rte_dir / "Rte_Swc.h").write_text("// SWC header generated by yuleOSH\n")
+                _append_log(job_id, "Mock RTE files created (Rte.c, Rte.h, Rte_Swc.h).")
 
-        _update_stage(job_id, "rte_generate", "passed", int(50 / total_stages * 100))
+            _update_stage(job_id, "rte_generate", "passed", int(50 / total_stages * 100))
 
         # Stage 5: CI Compile (Layer 1)
-        _update_stage(job_id, "ci_compile", "running")
-        _append_log(job_id, "Stage 5/7: Compiling with GCC...")
-        time.sleep(1)
+        if not _skip_stage(job_id, "ci_compile", start_idx):
+            _raise_if_cancelled(job_id)
+            _update_stage(job_id, "ci_compile", "running")
+            _append_log(job_id, "Stage 5/7: Compiling with GCC...")
+            time.sleep(1)
 
-        try:
-            from yuleosh.ci import run_layer1
-            compile_result = run_layer1(project_dir)
-            if compile_result and "failed" in str(compile_result).lower():
-                raise RuntimeError(f"Compile failed: {compile_result}")
-            _append_log(job_id, "Compilation passed.")
-        except Exception as e:
-            # P1-8: CI stages must fail explicitly — no simulated pass.
-            raise RuntimeError(f"CI compile stage failed: {e}") from e
+            try:
+                from yuleosh.ci import run_layer1
+                compile_result = run_layer1(project_dir)
+                if compile_result and "failed" in str(compile_result).lower():
+                    raise RuntimeError(f"Compile failed: {compile_result}")
+                _append_log(job_id, "Compilation passed.")
+            except Exception as e:
+                # P1-8: CI stages must fail explicitly — no simulated pass.
+                raise RuntimeError(f"CI compile stage failed: {e}") from e
 
-        _update_stage(job_id, "ci_compile", "passed", int(70 / total_stages * 100))
+            _update_stage(job_id, "ci_compile", "passed", int(70 / total_stages * 100))
 
         # Stage 6: MISRA Check (Layer 2)
-        _update_stage(job_id, "misra_check", "running")
-        _append_log(job_id, "Stage 6/7: Checking MISRA compliance...")
-        time.sleep(1)
+        if not _skip_stage(job_id, "misra_check", start_idx):
+            _raise_if_cancelled(job_id)
+            _update_stage(job_id, "misra_check", "running")
+            _append_log(job_id, "Stage 6/7: Checking MISRA compliance...")
+            time.sleep(1)
 
-        try:
-            from yuleosh.ci import run_layer2
-            misra_result = run_layer2(project_dir)
-            violations = 0
-            if misra_result and isinstance(misra_result, dict):
-                violations = misra_result.get("violations", 0)
-            _append_log(job_id, f"MISRA check passed. Violations: {violations}")
-        except Exception as e:
-            # P1-8: explicit failure — no simulated pass.
-            raise RuntimeError(f"MISRA check stage failed: {e}") from e
+            try:
+                from yuleosh.ci import run_layer2
+                misra_result = run_layer2(project_dir)
+                violations = 0
+                if misra_result and isinstance(misra_result, dict):
+                    violations = misra_result.get("violations", 0)
+                _append_log(job_id, f"MISRA check passed. Violations: {violations}")
+            except Exception as e:
+                # P1-8: explicit failure — no simulated pass.
+                raise RuntimeError(f"MISRA check stage failed: {e}") from e
 
-        _update_stage(job_id, "misra_check", "passed", int(85 / total_stages * 100))
+            _update_stage(job_id, "misra_check", "passed", int(85 / total_stages * 100))
 
         # Stage 7: Coverage (Layer 3)
-        _update_stage(job_id, "coverage", "running")
-        _append_log(job_id, "Stage 7/7: Analyzing code coverage...")
-        time.sleep(0.5)
+        if not _skip_stage(job_id, "coverage", start_idx):
+            _raise_if_cancelled(job_id)
+            _update_stage(job_id, "coverage", "running")
+            _append_log(job_id, "Stage 7/7: Analyzing code coverage...")
+            time.sleep(0.5)
 
-        try:
-            from yuleosh.ci import run_layer3
-            cov_result = run_layer3(project_dir)
-            coverage_pct = 0
-            if cov_result and isinstance(cov_result, dict):
-                coverage_pct = cov_result.get("coverage", 0)
-            _append_log(job_id, f"Coverage: {coverage_pct}%")
-        except Exception as e:
-            # P1-8: explicit failure — no simulated pass.
-            raise RuntimeError(f"Coverage stage failed: {e}") from e
+            try:
+                from yuleosh.ci import run_layer3
+                cov_result = run_layer3(project_dir)
+                coverage_pct = 0
+                if cov_result and isinstance(cov_result, dict):
+                    coverage_pct = cov_result.get("coverage", 0)
+                _append_log(job_id, f"Coverage: {coverage_pct}%")
+            except Exception as e:
+                # P1-8: explicit failure — no simulated pass.
+                raise RuntimeError(f"Coverage stage failed: {e}") from e
 
-        _update_stage(job_id, "coverage", "passed", 100)
+            _update_stage(job_id, "coverage", "passed", 100)
 
         # Finalize
         job["status"] = "passed"
@@ -495,6 +597,8 @@ def _run_full_pipeline(
         }
         _append_log(job_id, "=== Pipeline completed successfully! ===")
 
+    except _PipelineCancelled:
+        _mark_cancelled(job, job_id)
     except Exception as e:
         log.exception("Pipeline %s failed", job_id)
         job["status"] = "failed"

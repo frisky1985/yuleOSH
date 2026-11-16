@@ -252,14 +252,17 @@ def _build_tree(base: Path, current: Path, max_depth: int = 6, depth: int = 0) -
             node["children"].append(_build_tree(base, entry, max_depth, depth + 1))
         else:
             try:
-                size = entry.stat().st_size
+                st = entry.stat()
+                size, mtime = st.st_size, st.st_mtime
             except OSError:
-                size = 0
+                size, mtime = 0, None
             node["children"].append({
                 "name": entry.name,
                 "path": str(entry.relative_to(base)),
                 "type": "file",
                 "size": size,
+                # mtime 用于前端判定「评审结论是否已过期」（文件改动晚于评审时间）。
+                "mtime": mtime,
             })
     return node
 
@@ -302,8 +305,26 @@ def read_artifact(project_id: str, rel_path: str) -> dict:
     }
     if ext in text_exts or target.stat().st_size < 64 * 1024:
         try:
+            size = target.stat().st_size
+            # 大文件只预览前 512KB，避免整文件读入 + 前端高亮卡死界面。
+            limit = 512 * 1024
+            if size > limit:
+                with target.open("rb") as fh:
+                    raw = fh.read(limit)
+                return {
+                    "path": rel_path,
+                    "content": raw.decode("utf-8", "ignore"),
+                    "binary": False,
+                    "size": size,
+                    "truncated": True,
+                    "limit": limit,
+                    "message": f"文件过大（{size} 字节），仅预览前 {limit // 1024}KB",
+                }
             content = target.read_text(encoding="utf-8")
-            return {"path": rel_path, "content": content, "binary": False}
+            return {
+                "path": rel_path, "content": content, "binary": False,
+                "size": size, "truncated": False,
+            }
         except UnicodeDecodeError:
             pass
     return {
