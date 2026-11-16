@@ -22,6 +22,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 from pathlib import Path
 
 from yuleosh.pipeline.session import PipelineSession, PipelineStepError
@@ -659,6 +660,150 @@ def _load_charter(project_dir: str) -> dict | None:
     return data
 
 
+_CHARTER_KEYS = ("purpose", "scope", "deliverables", "owner",
+                 "budget", "schedule", "top_risk")
+
+
+def _spec_source_text(session: PipelineSession) -> str:
+    """读取规格原文（session.spec_path → docs/spec.md → docs/*.md）。"""
+    candidates: list[Path] = []
+    spec = getattr(session, "spec_path", None)
+    if spec:
+        p = Path(spec)
+        if p.is_file():
+            candidates.append(p)
+        elif p.is_dir():
+            candidates.extend(sorted(p.rglob("*.md")))
+    if not candidates:
+        docs = Path(session.project_dir) / "docs"
+        for name in ("spec.md", "system-requirements.md"):
+            if (docs / name).is_file():
+                candidates.append(docs / name)
+    parts: list[str] = []
+    for path in candidates[:5]:
+        try:
+            body = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if body.strip():
+            parts.append(f"### {path.name}\n{body}")
+    return "\n\n".join(parts)[:20000]
+
+
+def _parse_json_object(text: str) -> dict | None:
+    """从 LLM 输出中提取 JSON 对象（容忍 ```json 围栏与前后说明）。"""
+    if not text:
+        return None
+    cleaned = re.sub(r"```(?:json)?\s*", "", text).replace("```", "")
+    start, end = cleaned.find("{"), cleaned.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    try:
+        data = json.loads(cleaned[start:end + 1])
+    except ValueError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _draft_charter_with_llm(session: PipelineSession) -> dict | None:
+    """用 LLM 从规格起草 MAN.1 章程（不臆造：未知项标「未声明」）。
+
+    真跑复盘（2026-11-16, CL2）: 原实现只写空壳 ``{}``，``man1-review``
+    随即因缺 ``purpose`` hard-fail —— 从零项目不可能自动跑完 MAX.1。
+    章程的目的/范围本就派生自需求规格，因此交给流水线 LLM 起草，并标注
+    ``drafted_by`` / ``approval: pending``；批准仍由人工签批承担。
+    """
+    if getattr(session, "mock_mode", None) is True:
+        return None
+    spec = _spec_source_text(session)
+    if not spec.strip():
+        return None
+    system_prompt = (
+        "You are a project manager drafting an ASPICE MAN.1 project charter. "
+        "Output ONLY a JSON object (no prose, no markdown fences) with exactly "
+        "these keys: purpose, scope, deliverables, owner, budget, schedule, "
+        "top_risk.\n"
+        "Rules:\n"
+        "- Derive purpose/scope/deliverables strictly from the specification.\n"
+        "- Never invent contract amounts, dates, or names: if the spec does not "
+        "state them, use the string \"未声明\".\n"
+        "- purpose must be one concrete sentence; scope must list the covered "
+        "system boundaries.\n"
+        "- Respond in the language of the specification.\n")
+    user_prompt = "## Specification\n" + spec + \
+        "\n\n## Task\nReturn the charter JSON object."
+    try:
+        from yuleosh.pipeline.stages import _call_llm
+
+        result = _call_llm(session, system_prompt, user_prompt, max_tokens=2000)
+    except Exception as exc:  # noqa: BLE001 — LLM 不可用时不伪造章程
+        log.warning("MAN.1 charter drafting skipped: %s", exc)
+        return None
+    content = (result or {}).get("content", "") if isinstance(result, dict) \
+        else str(result or "")
+    data = _parse_json_object(content)
+    if not data:
+        log.warning("MAN.1 charter drafting: LLM output was not a JSON object")
+        return None
+    charter = {k: str(data.get(k) or "").strip() for k in _CHARTER_KEYS}
+    if not charter["purpose"]:
+        return None
+    if not charter["scope"] and not charter["deliverables"]:
+        charter["scope"] = "以 docs/spec.md 的系统边界为准"
+    charter.update({
+        "drafted_by": "pipeline:man1-charter (LLM)",
+        "source": "derived-from-spec",
+        "approval": "pending",
+        "generated_at": _now(),
+    })
+    return charter
+
+
+def _derive_charter_from_spec(session: PipelineSession) -> dict | None:
+    """LLM 不可用时的确定性回退：从规格派生 MAN.1 章程。
+
+    只搬运规格里**真实存在**的信息（标题、需求 ID、目的原文）；预算、进度
+    等规格未声明的字段固定写「未声明」，并标注 ``approval: pending`` ——
+    因此这不是臆造，而是可追溯的派生稿，批准仍须人工签批。
+    """
+    spec = _spec_source_text(session)
+    if not spec.strip():
+        return None
+    title = ""
+    for line in spec.splitlines():
+        if line.startswith("# "):
+            title = line[2:].strip()
+            break
+    req_ids = re.findall(r"^###\s+([A-Z][A-Z0-9]{1,9}-\d+)\b", spec,
+                         re.MULTILINE)
+    purpose = ""
+    m = re.search(r"^##\s*(?:目的|Purpose)\s*$\n+(.+?)(?:\n#|\Z)", spec,
+                  re.MULTILINE | re.DOTALL)
+    if m:
+        purpose = " ".join(m.group(1).split())[:300]
+    if not purpose:
+        purpose = (f"实现并交付「{title or '本项目'}」，满足规格中的全部"
+                   "系统需求与验收场景。")
+    scope = "系统边界以 `docs/spec.md` 为准"
+    if req_ids:
+        scope += "；覆盖需求：" + ", ".join(dict.fromkeys(req_ids))
+    charter = {
+        "purpose": purpose,
+        "scope": scope,
+        "deliverables": ("可构建的 C99 源码（src/）、单元与系统测试（tests/）、"
+                         "ASPICE 证据包（追溯、覆盖率、评审与签批记录）"),
+        "owner": "未声明",
+        "budget": "未声明",
+        "schedule": "未声明",
+        "top_risk": "未声明",
+        "drafted_by": "pipeline:man1-charter (deterministic)",
+        "source": "derived-from-spec",
+        "approval": "pending",
+        "generated_at": _now(),
+    }
+    return charter
+
+
 def _build_charter_doc(charter: dict | None, sources: list[str]) -> str:
     if charter:
         purpose = str(charter.get("purpose") or charter.get("objective") or "—").strip()
@@ -705,13 +850,20 @@ def step_man1_charter(session: PipelineSession) -> str:
     charter = _load_charter(session.project_dir)
     target = Path(session.project_dir) / CHARTER_FILE
     sources: list[str] = [f"file:{CHARTER_FILE}"]
-    if not target.is_file():
-        # 不臆造章程，只写空壳占位文件让评审能检测到；
-        # 空壳会被判定为"内容不足"，门禁会告警。
-        target.parent.mkdir(parents=True, exist_ok=True)
-        _write_json(session, CHARTER_FILE, {})
-        charter = {}
-        sources.append("auto:placeholder")
+    if not charter or not charter.get("purpose"):
+        # 章程缺失/不完整：交给流水线 LLM 从规格起草（不可用时保持空壳，
+        # 由 man1-review 如实判 RED，绝不伪造目的与范围）。
+        drafted = (_draft_charter_with_llm(session)
+                   or _derive_charter_from_spec(session))
+        if drafted:
+            _write_json(session, CHARTER_FILE, drafted)
+            charter = drafted
+            sources.append(f"auto:{drafted.get('drafted_by', 'derived')}")
+        elif not target.is_file():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            _write_json(session, CHARTER_FILE, {})
+            charter = {}
+            sources.append("auto:placeholder")
     doc_path = _write_doc(session, PROJECT_CHARTER,
                           _build_charter_doc(charter, sources))
     _write_step_marker(session, "man1-charter", status="completed",

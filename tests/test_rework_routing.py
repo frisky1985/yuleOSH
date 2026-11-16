@@ -34,6 +34,19 @@ class TestRoutes:
         assert rework.route_for("misra-review") == "development"
         assert rework.route_for("final-report") is None
 
+    def test_internal_code_review_rebuilds_and_deploys(self, tmp_path):
+        """F-05: 代码评审返工必须重跑「生成 → 部署」链，否则 src/ 不变。"""
+        assert rework.route_for("internal-code-review") == (
+            "development", "codegen-deploy")
+        write_artifact(tmp_path, "internal-code-review", "failed", [
+            {"severity": "major", "message": "overflow claim not implemented"},
+        ])
+        plan = rework.plan_rework(
+            FakeSession(tmp_path), "internal-code-review",
+            tmp_path / "internal-code-review.json")
+        assert plan["producers"] == ["development", "codegen-deploy"]
+        assert plan["producer"] == "development"
+
 
 class TestFindingsExtraction:
     def test_only_blocking_severities_are_returned(self, tmp_path):

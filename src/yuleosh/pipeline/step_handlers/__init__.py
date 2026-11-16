@@ -19,7 +19,8 @@ SUP.1/8/9/10 8 步、MAN.1/2/3/4 8 步及 ACQ.1~3/SPL.1/SUP.2~7/PIM.1~2/REU.1 26
 + 25 Gate 编排层
 （2026-08-19 老板八轮拍板 checkpoint v9；M1 增补 SYS 层 G0；后续补齐 MAN.5/MAN.6/VAL.1、管理支撑组、
 HWE.1~4/MLE.1~4 与 SUP.1/8/9/10/MAN.3，最后补齐剩余 13 域）:
-  - 执行层 PIPELINE_STEPS = 102 个子步骤（合并后，含 SYS.1~SYS.5 系统层 6 步）; checkpoint/resume /
+  - 执行层 PIPELINE_STEPS = 104 个子步骤（合并后，含 SYS.1~SYS.5 系统层 6 步与
+    test-case-gen / test-codegen；后者补 SWE.4 测试生成能力）; checkpoint/resume /
     step_cache / --from-step 全按实际步骤数
   - 编排层 GATES（yuleosh.pipeline.gates）: 25 Gate 对外稳定契约,
     gate status = 内部子步骤最差状态; 报告聚合 gate-summary.json
@@ -55,6 +56,8 @@ from yuleosh.pipeline.step_handlers.review_selftest import step_review_selftest
 from yuleosh.pipeline.step_handlers.test_integration import step_integration_test
 from yuleosh.pipeline.step_handlers.test_qualification import step_test_qualification
 from yuleosh.pipeline.step_handlers.test_c_unit import step_c_unit_test
+from yuleosh.pipeline.step_handlers.test_codegen import step_test_codegen
+from yuleosh.pipeline.step_handlers.test_case_gen import step_test_case_gen
 from yuleosh.pipeline.step_handlers.review_development import step_review_development
 from yuleosh.pipeline.step_handlers.review_linker import step_review_linker
 from yuleosh.pipeline.step_handlers.review_startup import step_review_startup
@@ -333,6 +336,12 @@ PIPELINE_STEPS = [
     # 挪后: 读 claude-review 结论（blockers/suggestions 注入 prompt）
     ("test-planning", "Claude", "测试规划",
      _resolve_handler("test-planning", step_test_planning)),
+    # 2026-11-16 CL2 真跑: 流水线只"执行"测试从不"生成"测试 → 覆盖永远 0%。
+    # test-case-gen 产结构化用例（RTM join），test-codegen 产可执行 C 测试。
+    ("test-case-gen", "小克", "结构化测试用例生成 (RTM)",
+     step_test_case_gen),
+    ("test-codegen", "小克", "单元测试代码生成 (SWE.4 覆盖证据)",
+     step_test_codegen),
 
     # ── G6 SWE.4 Unit Testing ──────────────────────────────
     # verify-loop = 合并 self-test + codex-verify + self-test-review

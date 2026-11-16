@@ -207,7 +207,7 @@ class TestCompliance:
 
 class TestRegistration:
     def test_step_and_gate_counts(self):
-        assert len(PIPELINE_STEPS) == 102
+        assert len(PIPELINE_STEPS) == 104
         assert len(GATES) == 25
         assert validate_gates_contract([s[0] for s in PIPELINE_STEPS]) == []
 

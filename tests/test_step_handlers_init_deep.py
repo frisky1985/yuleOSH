@@ -80,6 +80,7 @@ class TestPipelineStepsStructure:
             "architecture", "arch-review", "development", "development-review",
             "codegen-deploy",
             "internal-code-review", "claude-review", "test-planning",
+            "test-case-gen", "test-codegen",
             "verify-loop", "c-unit-test", "code-review", "misra-review",
             "integration-test", "qemu-verify", "coverage-review",
             "review-critical-safety", "fault-injection",

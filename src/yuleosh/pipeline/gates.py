@@ -104,7 +104,8 @@ GATES: list[dict] = [
     {
         "gate": "G6",
         "name": "SWE.4 单元验证 Gate",
-        "step_keys": ["verify-loop", "c-unit-test"],
+        "step_keys": ["test-case-gen", "test-codegen", "verify-loop",
+                      "c-unit-test"],
     },
     {
         "gate": "G7",

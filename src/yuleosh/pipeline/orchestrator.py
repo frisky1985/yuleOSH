@@ -743,6 +743,11 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
             if step_idx + 1 < from_step:
                 session.steps[step_idx]["status"] = "skipped"
                 session.steps[step_idx]["completed_at"] = datetime.now().isoformat()
+                # detail 携带豁免标记：断点续跑跳过不算 P0 证据缺失（NC-12）。
+                # 2026-11-16 真跑复盘: 主循环的预跳过分支未写 detail, P0 检查
+                # 读不到 "before --from-step" → 续跑虽恢复前序产物仍被判
+                # EVIDENCE MISSING，整条 run 无法续跑到 CL2。
+                session.steps[step_idx]["detail"] = "resume: before --from-step"
                 _executed.add(step_key)
                 _ri += 1
                 continue
@@ -1595,19 +1600,23 @@ def _maybe_rework(session, registered, review_idx: int, review_key: str,
                 review_key, getattr(session, "rework_rounds", {}).get(review_key),
             )
             break
-        producer_entry = next(
-            (e for e in registered if e[1] == plan["producer"]), None)
-        if producer_entry is None:
+        producer_keys = plan.get("producers") or [plan["producer"]]
+        producer_entries = [
+            next((e for e in registered if e[1] == key), None)
+            for key in producer_keys
+        ]
+        if any(e is None for e in producer_entries):
             break
         print(
-            f"  🔁 返工 {review_key} → {plan['producer']} "
+            f"  🔁 返工 {review_key} → {' → '.join(producer_keys)} "
             f"(第 {plan['round']}/{MAX_REWORK_ROUNDS} 轮, "
             f"{len(plan['findings'])} 条 findings)"
         )
         os.environ[plan["env_key"]] = plan["context"]
         try:
-            _execute_step(session, *producer_entry,
-                          spec_path, project_dir, from_step, step_callback)
+            for entry in producer_entries:
+                _execute_step(session, *entry,
+                              spec_path, project_dir, from_step, step_callback)
             _execute_step(session, *review_entry,
                           spec_path, project_dir, from_step, step_callback)
         finally:

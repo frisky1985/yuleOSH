@@ -431,6 +431,32 @@ def run_c_coverage_check(project_dir: str, ci: CIResult) -> bool:
         else:
             line_rate = 0.0
 
+    # gcovr --json 没有根级 branch_rate，分支数据在 files[].lines[].branches[]。
+    # 2026-11-16 真跑: branch_rate 恒 0.0 → 分支门禁误判"无分支数据"。
+    if branch_rate == 0.0 and "summary" not in report:
+        raw_files_b = report.get("files", [])
+        if isinstance(raw_files_b, dict):
+            raw_files_b = list(raw_files_b.values()) if raw_files_b else []
+        total_b = 0
+        hit_b = 0
+        for f in raw_files_b:
+            if not isinstance(f, dict):
+                continue
+            for ln in f.get("lines", []) or []:
+                if not isinstance(ln, dict):
+                    continue
+                for br in ln.get("branches", []) or []:
+                    total_b += 1
+                    if isinstance(br, dict) and br.get("count", 0) > 0:
+                        hit_b += 1
+            branches_block = f.get("branches")
+            if isinstance(branches_block, dict):
+                total_b += int(branches_block.get("found", 0))
+                hit_b += int(branches_block.get("hit", 0))
+        if total_b > 0:
+            branch_rate = round(100.0 * hit_b / total_b, 2)
+            report["branch_rate"] = branch_rate  # persist for downstream readers
+
     print(f"    C line coverage:   {line_rate:.1f}%")
     print(f"    C branch coverage: {branch_rate:.1f}%")
     print(f"    Threshold (c_fail_under): {c_fail_under}%")

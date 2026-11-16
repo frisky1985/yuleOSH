@@ -296,8 +296,20 @@ def _coverage_build_stale(project_dir: Path, coverage_build_dir: Path) -> bool:
             continue
     if newest_obj == 0.0:
         return True
-    for base in ("src", "tests"):
-        root = project_dir / base
+    # 2026-11-16 真跑复盘: CMakeLists 自身变更（例如 test-codegen 注入
+    # ENABLE_COVERAGE / add_subdirectory(tests)）也必须触发重建。否则
+    # "Existing coverage build found" 会复用未插桩的旧对象 → gcda 里
+    # 没有分支数据 → branch_rate 恒 0。
+    roots = [project_dir / "src", project_dir / "tests"]
+    for cmake_file in ("CMakeLists.txt",):
+        probe = project_dir / cmake_file
+        if probe.is_file():
+            try:
+                if probe.stat().st_mtime > newest_obj:
+                    return True
+            except OSError:
+                pass
+    for root in roots:
         if not root.exists():
             continue
         for src_file in root.rglob("*"):
@@ -533,8 +545,18 @@ def _phase_run_gcovr(project_dir: str, results: dict) -> dict:
             "--filter", "src/.*",
             "--exclude", "tests/.*",
             "--exclude", "third_party/.*",
+            # 主机仿真桩不是产品代码（HOST_SIM 下的 GPIO/时钟替身），
+            # 计入覆盖率只会稀释真实模块指标（2026-11-16 真跑: led_blink
+            # 90.9% 被 hal_host 28 行拖到 92.1%，分支 75% 被拖到 62.5%）。
+            "--exclude", ".*[_-]host\\.c",
+            "--exclude", ".*[_-]host\\.h",
             "--json", str(json_path),
             "--json-pretty",
+            # AUD-ASPICE-001 NC-06 真跑复盘（2026-11-16）: 不带 --branch 时
+            # gcovr 不输出 branch data，branch_rate 恒为 0.0 → ASIL 双阈值
+            # 永远判红（行 92.1% 却被分支 0% 拖死）。必须显式开启分支统计。
+            "--branch",
+            "--exclude-unreachable-branches",
             "--gcov-ignore-errors=source_not_found",
         ]
 
@@ -657,8 +679,10 @@ def _phase_check_gate(project_dir: str, results: dict) -> dict:
                         branch_rate = float(branch_m.group(1))
                 break
 
-        if line_rate == 0.0 and branch_rate == 0.0:
-            # 回读真实报告（禁止默认 0.0 污染证据）
+        if line_rate == 0.0 or branch_rate == 0.0:
+            # 回读真实报告（禁止默认 0.0 污染证据）。2026-11-16 真跑:
+            # stage detail 只带 line_rate → branch_rate 丢成 0.0，ASIL 双阈值
+            # 误判"分支覆盖不足"。line/branch 任一缺失都回读报告补齐。
             report_path = Path(project_dir) / ".yuleosh" / "reports" / "c-coverage.json"
             try:
                 if report_path.exists():
@@ -670,6 +694,24 @@ def _phase_check_gate(project_dir: str, results: dict) -> dict:
                     br = report_data.get("branch_rate")
                     if isinstance(br, (int, float)) and br > 0:
                         branch_rate = round(float(br), 2)
+                    elif branch_rate == 0.0:
+                        # gcovr JSON 无根级 branch_rate：从
+                        # files[].lines[].branches[] 直接汇总（与 CI 阶段
+                        # 同一算法）。缺数据时保持 0.0 —— 由门禁判红，绝不
+                        # 默认"通过"。
+                        found = hit = 0
+                        for f_entry in report_data.get("files", []) or []:
+                            if not isinstance(f_entry, dict):
+                                continue
+                            for ln in f_entry.get("lines", []) or []:
+                                if not isinstance(ln, dict):
+                                    continue
+                                for b in ln.get("branches", []) or []:
+                                    found += 1
+                                    if isinstance(b, dict) and b.get("count", 0) > 0:
+                                        hit += 1
+                        if found:
+                            branch_rate = round(100.0 * hit / found, 2)
                     log.warning(
                         "c-coverage-gate record: stage detail unparsable, "
                         "fell back to report values line_rate=%s branch_rate=%s",

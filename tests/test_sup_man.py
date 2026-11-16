@@ -259,6 +259,40 @@ class TestMan3Project:
         step_review_man3(sess)
 
 
+class TestMan1CharterDraft:
+    """MAN.1 章程派生（LLM 不可用时的确定性回退）。"""
+
+    def test_derives_charter_from_spec(self, tmp_path, monkeypatch):
+        sess = _make_session(tmp_path)
+        # LLM 不可用：只验证确定性派生路径（不联网、不伪造）。
+        monkeypatch.setattr(
+            "yuleosh.pipeline.step_handlers.sup_man._draft_charter_with_llm",
+            lambda _session: None)
+        spec = tmp_path / "spec.md"
+        spec.write_text(
+            "# LED 1 Hz 闪烁演示\n\n### RS-001: 闪烁\n- SHALL toggle\n\n"
+            "### RS-002: HAL\n- SHALL use HAL\n", encoding="utf-8")
+        sess.spec_path = str(spec)
+        step_man1_charter(sess)
+        charter = json.loads((tmp_path / CHARTER_FILE).read_text())
+        assert charter["purpose"]
+        assert "RS-001" in charter["scope"] and "RS-002" in charter["scope"]
+        assert charter["approval"] == "pending"
+        step_review_man1(sess)  # 有 purpose/scope → 门禁放行
+
+    def test_empty_spec_stays_red(self, tmp_path, monkeypatch):
+        sess = _make_session(tmp_path)
+        monkeypatch.setattr(
+            "yuleosh.pipeline.step_handlers.sup_man._draft_charter_with_llm",
+            lambda _session: None)
+        spec = tmp_path / "spec.md"
+        spec.write_text("", encoding="utf-8")
+        sess.spec_path = str(spec)
+        step_man1_charter(sess)
+        with pytest.raises(PipelineStepError):
+            step_review_man1(sess)  # 无规格可派生 → 必须如实 RED
+
+
 class TestComplianceProfile:
     def test_all_red_before_generation(self, tmp_path):
         _make_session(tmp_path)
