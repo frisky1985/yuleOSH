@@ -104,13 +104,54 @@ function logMain(level, message) {
 if (!IS_TEST && app.requestSingleInstanceLock && !app.requestSingleInstanceLock()) {
   app.quit();
 } else if (!IS_TEST) {
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, argv = []) => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.show();
       mainWindow.focus();
     }
+    // 通过协议再次启动：把 yuleosh:// 深链接转给已存在的窗口
+    handleDeepLink(extractDeepLink(argv));
   });
+
+  // macOS 通过 open-url 事件分发协议链接
+  app.on('open-url', (event, url) => {
+    event.preventDefault();
+    handleDeepLink(url);
+  });
+
+  try {
+    if (typeof app.setAsDefaultProtocolClient === 'function') {
+      app.setAsDefaultProtocolClient('yuleosh');
+    }
+  } catch (err) {
+    logMain('warn', `[Main] Deep link registration failed: ${err.message}`);
+  }
+}
+
+// ─── 深链接 ──────────────────────────────────────────
+// 形如 yuleosh://open?project=<id>&file=<rel-path>&line=<n>
+// 渲染进程尚未加载完成时先缓存，did-finish-load 后再补发。
+
+let pendingDeepLink = null;
+
+function extractDeepLink(argv = []) {
+  return argv.find(
+    (arg) => typeof arg === 'string' && arg.startsWith('yuleosh://'),
+  ) || null;
+}
+
+function handleDeepLink(url) {
+  if (!url) return false;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+    mainWindow.webContents.send('deep-link', url);
+  } else {
+    pendingDeepLink = url;
+  }
+  return true;
 }
 
 // ─── 应用菜单 ────────────────────────────────────────
@@ -661,6 +702,14 @@ async function createWindow() {
     createTray();
   });
 
+  // 渲染进程加载完成后补发尚未消费的深链接
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (pendingDeepLink) {
+      mainWindow.webContents.send('deep-link', pendingDeepLink);
+      pendingDeepLink = null;
+    }
+  });
+
   // 创建应用菜单
   buildAppMenu();
 
@@ -1028,6 +1077,18 @@ function registerIpcHandlers() {
       return false;
     }
   });
+
+  // 托盘状态同步：最近工程列表 + 流水线进度
+  ipcMain.handle('update-tray', (_event, payload = {}) => {
+    if (!trayManager) return { ok: false };
+    if (Array.isArray(payload.recentProjects)) {
+      trayManager.setRecentProjects(payload.recentProjects);
+    }
+    if (payload.pipeline) {
+      trayManager.setPipelineStatus(payload.pipeline);
+    }
+    return { ok: true };
+  });
 }
 
 // ─── 信号转发 ────────────────────────────────────────
@@ -1247,4 +1308,6 @@ module.exports = {
   SECURITY_HEADERS,
   HTML_CSP,
   FRONTEND_OUT_DIR,
+  extractDeepLink,
+  handleDeepLink,
 };

@@ -48,10 +48,13 @@ jest.mock('electron', () => {
     hide = jest.fn();
     focus = jest.fn();
     isVisible = jest.fn(() => this._visible);
+    isDestroyed = jest.fn(() => false);
     isMaximized = jest.fn(() => this._maximized);
     maximize = jest.fn(() => { this._maximized = true; });
     unmaximize = jest.fn(() => { this._maximized = false; });
     minimize = jest.fn();
+    isMinimized = jest.fn(() => false);
+    restore = jest.fn();
     close = jest.fn();
     reload = jest.fn();
   }
@@ -255,6 +258,7 @@ describe('AC-2.x — 后端错误恢复 IPC', () => {
     const channels = ipcMain.handle.mock.calls.map((call) => call[0]);
     expect(channels).toContain('reveal-artifact');
     expect(channels).toContain('show-notification');
+    expect(channels).toContain('update-tray');
   });
 
   test('AC-2.1.5: IPC 处理器只注册一次（重复 createWindow 不抛异常）', async () => {
@@ -282,6 +286,55 @@ describe('AC-2.x — 后端错误恢复 IPC', () => {
   });
 });
 
+// ── 托盘增强：最近工程 + 流水线状态 ──────────────────
+
+describe('桌面增强 — 托盘', () => {
+  const { Menu } = require('electron');
+  const TrayManager = require('../tray');
+
+  function makeWindow() {
+    return {
+      isDestroyed: () => false,
+      isVisible: () => true,
+      isMinimized: () => false,
+      restore: jest.fn(),
+      show: jest.fn(),
+      focus: jest.fn(),
+      hide: jest.fn(),
+      webContents: { send: jest.fn() },
+    };
+  }
+
+  test('托盘菜单展示流水线进度与最近工程，点击后通知渲染进程', () => {
+    const win = makeWindow();
+    const tray = new TrayManager(win);
+    tray.create();
+
+    tray.setRecentProjects([{ id: 'p1', name: '工程一' }, { id: 'p2', name: '工程二' }]);
+    tray.setPipelineStatus({ running: true, progress: 42, stage: 'code' });
+
+    const template = Menu.buildFromTemplate.mock.calls.at(-1)[0];
+    expect(template[0].label).toBe('流水线 42% · code');
+    expect(template[0].enabled).toBe(false);
+
+    const recent = template.find((item) => item.label === '最近工程');
+    expect(recent.submenu).toHaveLength(2);
+
+    recent.submenu[0].click();
+    expect(win.webContents.send).toHaveBeenCalledWith('open-project', 'p1');
+  });
+
+  test('流水线结束后菜单不再展示进度项', () => {
+    const tray = new TrayManager(makeWindow());
+    tray.create();
+    tray.setPipelineStatus({ running: true, progress: 10, stage: 'design' });
+    tray.setPipelineStatus({ running: false, progress: 100, stage: null });
+
+    const template = Menu.buildFromTemplate.mock.calls.at(-1)[0];
+    expect(template[0].label).toMatch(/隐藏窗口|显示窗口/);
+  });
+});
+
 // ── AC-2.5 渲染进程恢复 & 安全响应头 ────────────────
 
 describe('AC-2.5 — 渲染进程恢复与安全响应头', () => {
@@ -293,6 +346,28 @@ describe('AC-2.5 — 渲染进程恢复与安全响应头', () => {
     win.webContents.emit('render-process-gone', {}, { reason: 'crashed', exitCode: 1 });
 
     expect(win.reload).toHaveBeenCalled();
+  });
+
+  test('深链接：extractDeepLink 只识别 yuleosh:// 参数', () => {
+    expect(main.extractDeepLink(['electron', '--flag'])).toBeNull();
+    expect(
+      main.extractDeepLink(['electron', 'yuleosh://open?project=p1&file=code/a.c&line=3']),
+    ).toBe('yuleosh://open?project=p1&file=code/a.c&line=3');
+  });
+
+  test('深链接：handleDeepLink 转发给渲染进程', async () => {
+    mockWindows.length = 0;
+    await main.createWindow();
+    const win = mockWindows[mockWindows.length - 1];
+    win.webContents.send.mockClear();
+
+    const ok = main.handleDeepLink('yuleosh://open?project=p1&file=code/a.c&line=3');
+
+    expect(ok).toBe(true);
+    expect(win.webContents.send).toHaveBeenCalledWith(
+      'deep-link',
+      'yuleosh://open?project=p1&file=code/a.c&line=3',
+    );
   });
 
   test('静态资源带安全响应头，HTML 额外带 CSP', () => {

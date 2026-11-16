@@ -2,14 +2,33 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
-import { FileText, FolderPlus, Play, Search, UploadCloud } from "lucide-react";
+import {
+  Bell,
+  BellOff,
+  ClipboardCopy,
+  FileText,
+  FolderPlus,
+  History,
+  Inbox,
+  Play,
+  Search,
+  Square,
+  UploadCloud,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { GOVERNANCE_GROUPS } from "@/components/desktop/governance-menu";
 import type { GovernanceKey } from "@/components/desktop/governance-menu";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
-export type CommandActionKey = "new-project" | "run-pipeline" | "sync";
+export type CommandActionKey =
+  | "new-project"
+  | "run-pipeline"
+  | "cancel-run"
+  | "sync"
+  | "open-gaps"
+  | "copy-path"
+  | "toggle-notifications";
 
 export interface PaletteProject {
   id: string;
@@ -23,6 +42,14 @@ interface CommandPaletteProps {
   activeId: string | null;
   /** 当前工程的产物文件相对路径，用于快速打开。 */
   files?: string[];
+  /** 最近打开过的文件（会置顶显示，且只在当前工程文件内展示）。 */
+  recentFiles?: string[];
+  /** 当前是否有运行中的流水线（决定是否展示「取消运行」）。 */
+  canCancel?: boolean;
+  /** 当前是否有选中的文件（决定是否展示「复制路径」）。 */
+  hasSelection?: boolean;
+  /** 桌面通知开关状态。 */
+  notificationsOn?: boolean;
   onSelectProject: (id: string) => void;
   onOpenFile?: (path: string) => void;
   onGovernance: (key: GovernanceKey) => void;
@@ -50,6 +77,10 @@ export function CommandPalette({
   projects,
   activeId,
   files = [],
+  recentFiles = [],
+  canCancel = false,
+  hasSelection = false,
+  notificationsOn = true,
   onSelectProject,
   onOpenFile,
   onGovernance,
@@ -86,7 +117,57 @@ export function CommandPalette({
         icon: UploadCloud,
         run: () => onAction("sync"),
       },
+      {
+        id: "action-open-gaps",
+        label: "打开证据缺口",
+        hint: "查看未评审、过期评审与未闭环问题",
+        group: "操作",
+        icon: Inbox,
+        run: () => onAction("open-gaps"),
+      },
     ];
+
+    if (canCancel) {
+      actions.push({
+        id: "action-cancel-run",
+        label: "取消运行中的流水线",
+        hint: "在当前阶段结束后停止，已完成的阶段结果保留",
+        group: "操作",
+        icon: Square,
+        run: () => onAction("cancel-run"),
+      });
+    }
+    if (hasSelection) {
+      actions.push({
+        id: "action-copy-path",
+        label: "复制当前文件路径",
+        hint: "把选中产物的相对路径写入剪贴板",
+        group: "操作",
+        icon: ClipboardCopy,
+        run: () => onAction("copy-path"),
+      });
+    }
+    actions.push({
+      id: "action-toggle-notifications",
+      label: notificationsOn ? "关闭桌面通知" : "开启桌面通知",
+      hint: "流水线完成/失败时是否弹出系统通知",
+      group: "操作",
+      icon: notificationsOn ? BellOff : Bell,
+      run: () => onAction("toggle-notifications"),
+    });
+
+    const recentSet = new Set(files);
+    const recentItems: PaletteItem[] = recentFiles
+      .filter((path) => recentSet.has(path))
+      .slice(0, 6)
+      .map((path) => ({
+        id: `recent-${path}`,
+        label: path.split("/").pop() || path,
+        hint: path,
+        group: "最近打开",
+        icon: History,
+        run: () => onOpenFile?.(path),
+      }));
 
     const projectItems: PaletteItem[] = projects.map((p) => ({
       id: `project-${p.id}`,
@@ -117,8 +198,20 @@ export function CommandPalette({
       })),
     );
 
-    return [...actions, ...projectItems, ...fileItems, ...governance];
-  }, [projects, activeId, files, onAction, onSelectProject, onOpenFile, onGovernance]);
+    return [...actions, ...recentItems, ...projectItems, ...fileItems, ...governance];
+  }, [
+    projects,
+    activeId,
+    files,
+    recentFiles,
+    canCancel,
+    hasSelection,
+    notificationsOn,
+    onAction,
+    onSelectProject,
+    onOpenFile,
+    onGovernance,
+  ]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

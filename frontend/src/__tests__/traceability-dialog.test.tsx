@@ -142,6 +142,25 @@ describe("TraceabilityDialog", () => {
     expect(screen.getByText("tests/test_main.c")).toBeInTheDocument();
   });
 
+  it("展开后点击文件名触发 onOpenArtifact", async () => {
+    fetchMock.mockReturnValueOnce(jsonResponse(RTM));
+    const onOpenArtifact = jest.fn();
+    render(
+      <TraceabilityDialog
+        open
+        onOpenChange={jest.fn()}
+        projectId="p1"
+        onOpenArtifact={onOpenArtifact}
+      />,
+    );
+    await screen.findByTestId("rtm-table");
+
+    fireEvent.click(screen.getByTestId("rtm-row-REQ-001"));
+    fireEvent.click(screen.getByTestId("rtm-file-code/main.c"));
+
+    expect(onOpenArtifact).toHaveBeenCalledWith("code/main.c");
+  });
+
   it("切换到审计链校验时加载校验结果", async () => {
     fetchMock.mockReturnValueOnce(jsonResponse(RTM));
     fetchMock.mockReturnValueOnce(jsonResponse(CHAIN));

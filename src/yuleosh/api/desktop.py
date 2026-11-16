@@ -17,6 +17,7 @@ import logging
 import os
 import re
 import shutil
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -524,6 +525,10 @@ def _dispatch_projects(method: str, parts: list, body: Any, query: dict) -> tupl
         action = parts[2] if len(parts) > 2 else ""
         if action == "run" and method == "POST":
             return _run_pipeline(project_id, body)
+        # 运行前环境预检（Python / cppcheck / 磁盘 / 需求 / 模型配置）。
+        # /api/v1/desktop/projects/{id}/pipeline/preflight
+        if action == "preflight" and method == "GET":
+            return _pipeline_preflight(project_id)
         if action == "runs" and method == "GET":
             return _json({"ok": True, "runs": workspace.list_pipeline_runs(project_id)})
         # 取消运行中/排队中的任务（协作式：在阶段边界退出）
@@ -757,6 +762,105 @@ def _import_requirements(project_id: str, body: Any) -> tuple:
     except FileNotFoundError:
         return _json({"ok": False, "error": "Project not found"}, 404)
     return _json({"ok": True, "manifest": manifest}, 201)
+
+
+def _pipeline_preflight(project_id: str) -> tuple:
+    """运行前环境预检：缺依赖时给出可执行的修复建议，而不是等流水线跑一半才失败。
+
+    返回 ``ready=False`` 仅代表存在阻塞项（如磁盘不足/工程不可写）；
+    cppcheck、模型 Key 缺失属于降级项（warn），仍允许继续运行。
+    """
+    try:
+        proj_dir = workspace._project_dir(project_id)
+        workspace._load_meta(project_id)
+    except FileNotFoundError:
+        return _json({"ok": False, "error": "Project not found"}, 404)
+
+    checks: list[dict] = []
+
+    # Python 运行时
+    ver = sys.version_info
+    python_ok = (ver.major, ver.minor) >= (3, 10)
+    checks.append({
+        "key": "python",
+        "label": "Python 运行时",
+        "status": "ok" if python_ok else "fail",
+        "detail": f"{ver.major}.{ver.minor}.{ver.micro}",
+        "hint": "" if python_ok else "需要 Python 3.10+，请升级运行时后重启应用。",
+    })
+
+    # 工程目录可写
+    try:
+        probe = proj_dir / ".yuleosh" / ".write-probe"
+        probe.parent.mkdir(parents=True, exist_ok=True)
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink()
+        writable = True
+    except OSError:
+        writable = False
+    checks.append({
+        "key": "workspace",
+        "label": "工程目录可写",
+        "status": "ok" if writable else "fail",
+        "detail": str(proj_dir),
+        "hint": "" if writable else "检查工程目录权限，或把工作区移到用户目录下。",
+    })
+
+    # 磁盘空间
+    try:
+        free = shutil.disk_usage(proj_dir).free
+    except OSError:
+        free = 0
+    free_mb = free // (1024 * 1024)
+    if free_mb >= 500:
+        disk_status = "ok"
+    elif free_mb >= 100:
+        disk_status = "warn"
+    else:
+        disk_status = "fail"
+    checks.append({
+        "key": "disk",
+        "label": "可用磁盘空间",
+        "status": disk_status,
+        "detail": f"{free_mb} MB",
+        "hint": "" if disk_status == "ok" else "清理磁盘后重试（建议至少 500 MB）。",
+    })
+
+    # 需求文档
+    req = proj_dir / "requirements" / "requirements.md"
+    has_req = req.exists() and req.stat().st_size > 0
+    checks.append({
+        "key": "requirements",
+        "label": "需求文档",
+        "status": "ok" if has_req else "warn",
+        "detail": "requirements/requirements.md" if has_req else "缺失",
+        "hint": "" if has_req else "在底部输入框导入需求，或从模板创建工程。",
+    })
+
+    # cppcheck（MISRA 静态检查，可选）
+    cppcheck = shutil.which("cppcheck")
+    checks.append({
+        "key": "cppcheck",
+        "label": "cppcheck 静态检查",
+        "status": "ok" if cppcheck else "warn",
+        "detail": cppcheck or "未安装",
+        "hint": "" if cppcheck else "安装 cppcheck 后可启用 MISRA 检查（如 apt install cppcheck）。",
+    })
+
+    # 模型配置（缺少时流水线会退化为模板/mock 产出）
+    provider = (os.environ.get("YULEOSH_LLM_PROVIDER") or "").strip().lower()
+    has_key = any(os.environ.get(name) for names in _LLM_KEY_ENVS.values() for name in names)
+    model_status = "ok" if (provider == "mock" or has_key) else "warn"
+    checks.append({
+        "key": "llm",
+        "label": "模型配置",
+        "status": model_status,
+        "detail": "mock（本地模板）" if provider == "mock" else ("已配置" if has_key else "未配置 Key"),
+        "hint": "" if model_status == "ok" else "在「模型设置」中填写 API Key，否则代码生成将使用本地模板。",
+    })
+
+    ready = all(c["status"] != "fail" for c in checks)
+    return _json({"ok": True, "ready": ready, "checks": checks}, 200)
 
 
 def _run_pipeline(project_id: str, body: Any) -> tuple:

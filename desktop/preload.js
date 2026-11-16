@@ -172,6 +172,35 @@ contextBridge.exposeInMainWorld('electronAPI', {
    */
   notify: (payload) => ipcRenderer.invoke('show-notification', payload),
 
+  /**
+   * 同步托盘状态（最近工程 + 流水线进度）
+   * @param {{recentProjects?: {id:string,name:string}[], pipeline?: {running:boolean,progress:number,stage?:string|null}}} payload
+   * @returns {Promise<{ok:boolean}>}
+   */
+  updateTray: (payload) => ipcRenderer.invoke('update-tray', payload),
+
+  /**
+   * 订阅托盘「最近工程」点击事件
+   * @param {(projectId:string) => void} callback
+   * @returns {() => void} 取消订阅
+   */
+  onOpenProject: (callback) => {
+    const handler = (_event, projectId) => callback(projectId);
+    ipcRenderer.on('open-project', handler);
+    return () => ipcRenderer.removeListener('open-project', handler);
+  },
+
+  /**
+   * 订阅深链接（yuleosh://open?project=&file=&line=）
+   * @param {(url:string) => void} callback
+   * @returns {() => void} 取消订阅
+   */
+  onDeepLink: (callback) => {
+    const handler = (_event, url) => callback(url);
+    ipcRenderer.on('deep-link', handler);
+    return () => ipcRenderer.removeListener('deep-link', handler);
+  },
+
   // ─── 应用信息 ─────────────────────────────────────
 
   /** @returns {Promise<string>} 应用版本号 */
