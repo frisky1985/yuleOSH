@@ -569,6 +569,31 @@ def _artifact_paths(sdir: Path | None, step_key: str) -> list[Path]:
     return [p for p in paths if p.exists()]
 
 
+#: 系统层 (SYS.1~SYS.5) 的产物按 ASPICE 文档规范落在 ``<project>/docs/``，
+#: 不在 session 目录内。门禁若只扫 session 目录，这 5 步的产物永远"找不到"，
+#: 被降级成 ``not-run``，G0 因此永不闭环（ASPICE 注册表 AUD-ASPICE-001 F-04）。
+_PROJECT_ARTIFACT_CANDIDATES: dict[str, tuple[str, ...]] = {
+    "sys-requirements": ("docs/system-requirements.md",),
+    "sys-architecture": ("docs/system-architecture.md",),
+    "sys-verification": ("docs/system-verification.md",),
+    "sys-integration": ("docs/system-integration.md",),
+    "sys-validation": ("docs/system-validation.md",),
+    "sys-req-review": (".osh/evidence/sys-review.json",
+                       "docs/system-requirements.md"),
+}
+
+
+def _project_artifact_paths(project_dir: Path | str | None,
+                            step_key: str) -> list[Path]:
+    """Return project-level artifact paths for ``step_key`` (existing only)."""
+    if project_dir is None:
+        return []
+    root = Path(project_dir)
+    names = _PROJECT_ARTIFACT_CANDIDATES.get(step_key, ())
+    paths = [root / n for n in names]
+    return [p for p in paths if p.is_file()]
+
+
 def _artifact_verdict(sdir: Path | None, step_key: str,
                       expected_session: str = "") -> str:
     """Derive a gate verdict from a step's own artifact JSON.
@@ -684,7 +709,8 @@ def _self_reported_success(status: str) -> bool:
 
 
 def _apply_artifact_overlay(step_statuses: dict[str, str], sdir: Path,
-                            expected_session: str = "") -> list[str]:
+                            expected_session: str = "",
+                            project_dir: Path | str | None = None) -> list[str]:
     """Let each step's own artifact correct — or refute — its recorded status.
 
     Two defects are repaired here:
@@ -726,6 +752,7 @@ def _apply_artifact_overlay(step_statuses: dict[str, str], sdir: Path,
         if (_self_reported_success(step_statuses[key])
                 and not _is_freshness_exempt(key)
                 and not _artifact_paths(sdir, key)
+                and not _project_artifact_paths(project_dir, key)
                 and not step_map.get(key)):
             log.warning(
                 "step %r claimed %r but produced no artifact — recorded as "
@@ -765,7 +792,8 @@ def write_gate_summary(session, step_statuses: dict[str, str] | None = None,
         # overridden.
         if sdir is not None:
             _expected = str(getattr(session, "name", "") or "")
-            _apply_artifact_overlay(step_statuses, Path(sdir), _expected)
+            _pdir = getattr(session, "project_dir", None)
+            _apply_artifact_overlay(step_statuses, Path(sdir), _expected, _pdir)
 
     gate_statuses = aggregate_gate_status(step_statuses)
 
@@ -796,8 +824,11 @@ def write_gate_summary(session, step_statuses: dict[str, str] | None = None,
         # ``_artifact_paths`` so the candidate table applies here too.
         artifact_hashes: dict[str, str] = {}
         if sdir is not None:
+            _pdir = getattr(session, "project_dir", None)
             for step_key in g["step_keys"]:
-                for path in _artifact_paths(Path(sdir), step_key):
+                resolved = (_artifact_paths(Path(sdir), step_key)
+                            or _project_artifact_paths(_pdir, step_key))
+                for path in resolved:
                     digest = _sha256_file(path)
                     if digest:
                         artifact_hashes[step_key] = digest
@@ -989,7 +1020,8 @@ def traceability_gate(traceability: dict | None,
 def classify_run_outcome(session_status: str, errors=None,
                          gate_summary: dict | None = None,
                          na_gates=None, config: dict | None = None,
-                         traceability: dict | None = None) -> dict:
+                         traceability: dict | None = None,
+                         signoffs: dict | None = None) -> dict:
     """Decide the run-level verdict — the single place GREEN is granted.
 
     Returns::
@@ -1007,6 +1039,9 @@ def classify_run_outcome(session_status: str, errors=None,
       3. no blocking gate: every non-advisory gate is ``passed``, or is
          skipped/not-run **and** explicitly declared n/a
       4. no step errors
+      5. when ``signoffs`` is supplied, every required gate has a valid
+         human sign-off; otherwise the outcome is ``awaiting-signoff``
+         (CL2: automation never grants release on its own).
 
     Why (3) exists (2026-09-23): the orchestrator previously granted GREEN on
     (1) + (4) alone, so run 57fa80e754ed printed "GREEN — all gates passed"
@@ -1039,16 +1074,33 @@ def classify_run_outcome(session_status: str, errors=None,
     if trace and trace.get("status") == "failed":
         blocking.append({"gate": TRACE_GATE_KEY, "status": "failed"})
 
+    # AUD-ASPICE-001 NC-09: 关键基线（G1 需求 / G2 架构）必须人工签批。
+    # 未签批 ≠ 红：自动化只能把证据准备好，放行结论为 awaiting-signoff。
+    signoff_blocking: list[dict] = []
+    for gate_key, info in (signoffs or {}).items():
+        if isinstance(info, dict) and info.get("signed") is True:
+            continue
+        reason = ""
+        if isinstance(info, dict):
+            reason = str(info.get("reason") or "")
+        signoff_blocking.append({
+            "gate": str(gate_key).upper(),
+            "status": "awaiting-signoff",
+            "reason": reason,
+        })
+
     def _result(outcome: str, reason: str) -> dict:
         result = {
             "outcome": outcome,
             "reason": reason,
             "worst_gate_status": worst,
-            "blocking_gates": blocking,
+            "blocking_gates": blocking + signoff_blocking,
             "declared_na": sorted(set(declared_hits)),
         }
         if trace is not None:
             result["traceability"] = trace
+        if signoffs is not None:
+            result["signoffs"] = signoffs
         return result
 
     if str(session_status) != "completed":
@@ -1058,6 +1110,10 @@ def classify_run_outcome(session_status: str, errors=None,
     if blocking:
         detail = ", ".join(f"{b['gate']}={b['status']}" for b in blocking)
         return _result("unverified", f"gate evidence incomplete ({detail})")
+    if signoff_blocking:
+        detail = ", ".join(b["gate"] for b in signoff_blocking)
+        return _result("awaiting-signoff",
+                       f"human sign-off required for {detail}")
     if errors:
         return _result("unverified", f"{len(errors)} step verdict failure(s)")
     if worst != "passed" and not declared_hits:

@@ -104,6 +104,7 @@ def verify_c(
     cc: Optional[str] = None,
     project_root: Optional[Path] = None,
     cflags: Optional[list[str]] = None,
+    platform: Optional[str] = None,
 ) -> dict:
     """Syntax-check C/C++ files with ``gcc -fsyntax-only`` (or ``cc``).
 
@@ -197,6 +198,13 @@ def verify_c(
                         inc_dirs.append(key)
 
     cmd = [cc, "-fsyntax-only", "-std=c11"]
+    # AUD-ASPICE-001 F-02: POSIX API 自检宏。
+    # 裸 `-std=c11` 会隐藏 clock_gettime/nanosleep/pthread_* 等声明
+    # （RUN-A 第 24 步即因此 4 轮 repair 全盲）。宿主机/仿真的语法检查
+    # 必须暴露 `_POSIX_C_SOURCE`；裸机目标则**不能**加 —— 那里出现 POSIX
+    # 调用本身就是平台越界，应当由编译失败暴露出来。
+    if _needs_posix_macro(sources) and not _is_bare_metal(platform):
+        cmd.append("-D_POSIX_C_SOURCE=200809L")
     cmd += list(cflags if cflags is not None else ["-Wall"])
     for d in inc_dirs:
         cmd += ["-I", d]
@@ -213,6 +221,29 @@ def verify_c(
     except subprocess.TimeoutExpired:
         return _result(False, LANGUAGE_C, " ".join(cmd),
                        "gcc -fsyntax-only timed out (120s)", -1)
+
+
+_POSIX_CALL_RE = re.compile(
+    r"\b(clock_gettime|clock_nanosleep|nanosleep|usleep|gettimeofday|"
+    r"pthread_\w+|sigaction|dlopen|mmap)\s*\("
+)
+_BARE_METAL_PLATFORM = "BARE_METAL_MCU"
+
+
+def _needs_posix_macro(sources: list[Path]) -> bool:
+    """源码是否调用了需要 ``_POSIX_C_SOURCE`` 才能声明出来的 API。"""
+    for path in sources:
+        try:
+            text = Path(path).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if _POSIX_CALL_RE.search(text):
+            return True
+    return False
+
+
+def _is_bare_metal(platform: Optional[str]) -> bool:
+    return str(platform or "").strip().upper().replace("-", "_") == _BARE_METAL_PLATFORM
 
 
 def discover_project_cflags(project_root: str | Path) -> list[str]:
@@ -279,6 +310,7 @@ def compile_verify(
     cc: Optional[str] = None,
     project_root: Optional[Path] = None,
     cflags: Optional[list[str]] = None,
+    platform: Optional[str] = None,
 ) -> dict:
     """Verify generated files compile.
 
@@ -303,7 +335,8 @@ def compile_verify(
     if language == LANGUAGE_PYTHON:
         return verify_python(files, python_cmd=python_cmd)
     if language == LANGUAGE_C:
-        return verify_c(files, cc=cc, project_root=project_root, cflags=cflags)
+        return verify_c(files, cc=cc, project_root=project_root,
+                        cflags=cflags, platform=platform)
     return _result(False, LANGUAGE_UNKNOWN, "(none)",
                    "cannot verify: unknown language for files "
                    f"{[str(f) for f in files]}", -1)

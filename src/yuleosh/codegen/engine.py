@@ -311,6 +311,7 @@ class CodegenEngine:
         forbidden_features: Optional[dict[str, list[str]]] = None,
         requirement_ids: Optional[list[str] | set[str]] = None,
         autosar_rules: Optional[dict] = None,
+        platform: Optional[str] = None,
         event_handler: Optional[Callable[[str, dict], None]] = None,
     ):
         self.output_dir = Path(output_dir) if output_dir else None
@@ -350,6 +351,11 @@ class CodegenEngine:
         }
         from yuleosh.codegen.autosar import normalize_autosar_rules
         self.autosar_rules = normalize_autosar_rules(autosar_rules)
+        # NC-11: 平台模式（BARE_METAL_MCU / AUTOSAR_CP / HOST_SIM / AUTO）。
+        # 生成后按平台规则校验目录布局，越界产物进入 repair 轮。
+        from yuleosh.project_meta import normalize_platform
+
+        self.platform = normalize_platform(platform)
         self.event_handler = event_handler
         # seed 基线内存快照 (rel_path -> content), _sync_seed 后立即抓取,
         # 供头脑风暴强制恢复 — 不依赖 seed_dir 磁盘 (测试里 seed_dir 可能
@@ -476,6 +482,7 @@ class CodegenEngine:
                     verify_files, language=language_hint, build_cmd=build_cmd,
                     project_root=getattr(session, "project_dir", None),
                     cflags=cflags,
+                    platform=self.platform,
                 )
             else:
                 verify = self.verifier(
@@ -495,6 +502,12 @@ class CodegenEngine:
                 autosar_failed = bool(autosar_errors)
                 if autosar_errors:
                     extra_errors = (extra_errors + "\n" if extra_errors else "") + autosar_errors
+                # NC-11: 平台越界（BARE_METAL 工程出现 RTE/SchM/arxml）
+                platform_errors = self._check_platform_layout(out_dir)
+                if platform_errors:
+                    extra_errors = (
+                        (extra_errors + "\n" if extra_errors else "") + platform_errors
+                    )
                 # ── 结构性 smoke 特征 (2026-08-17) ──────────────────
                 # 编译通过但核心功能路径被删 (防夹检测/反转序列) — 行为验证
                 # 可能因环境 (ARM 链接) 无法执行, 特征级检查在链接前拦截。
@@ -1337,6 +1350,20 @@ class CodegenEngine:
         from yuleosh.codegen.autosar import validate_autosar_output
         return validate_autosar_output(out_dir, self.autosar_rules)
 
+    def _check_platform_layout(self, out_dir: Path) -> str:
+        """NC-11: 按平台元数据校验生成目录（越界产物 → repair 轮）。"""
+        from yuleosh.project_meta import validate_platform_layout
+
+        try:
+            rels = [
+                str(p.relative_to(out_dir)).replace("\\", "/")
+                for p in out_dir.rglob("*")
+                if p.is_file()
+            ]
+        except OSError:
+            return ""
+        return "\n".join(validate_platform_layout(rels, self.platform))
+
     def _final_verify(
         self,
         result: CodegenResult,
@@ -1368,6 +1395,7 @@ class CodegenEngine:
                 verify_files, language=language_hint, build_cmd=build_cmd,
                 project_root=getattr(session, "project_dir", None),
                 cflags=cflags,
+                platform=self.platform,
             )
         else:
             verify = self.verifier(
@@ -1392,6 +1420,9 @@ class CodegenEngine:
         autosar_errors = self._check_autosar_layout(out_dir)
         if autosar_errors:
             extra = (extra + "\n" if extra else "") + autosar_errors
+        platform_errors = self._check_platform_layout(out_dir)
+        if platform_errors:
+            extra = (extra + "\n" if extra else "") + platform_errors
         extra = self._check_structural_features(out_dir, extra)
         extra = self._check_forbidden_features(out_dir, extra)
         if extra:

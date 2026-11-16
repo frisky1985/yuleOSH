@@ -106,6 +106,12 @@ class PipelineSession:
         self.name = name
         self.spec_path = str(Path(spec_path).resolve())
         self.project_dir = str(Path(os.environ.get("OSH_HOME", ".")).resolve())
+        # AUD-ASPICE-001 NC-01: 评审 → 生产者返工轮次台账
+        # {review_step_key: rounds_used}
+        self.rework_rounds: dict[str, int] = {}
+        # AUD-ASPICE-001 NC-03: 验证独立性台账
+        # {step_key: {level: isolated|degraded|none, channel, reason, ...}}
+        self.verification_independence: dict = {}
         # Portal 方案 B (2026-08-10): 消费计量归属组织（JWT org_id，CLI 默认 0）。
         self.org_id: int = org_id
         # Phase 9 (2026-08-10): 用户归因 + run 唯一标识。
@@ -334,6 +340,12 @@ class PipelineSession:
             # gate evidence, not from "every step finished".  None means the
             # pipeline has not reached the gate-summary stage yet.
             "gate_verdict": getattr(self, "gate_verdict", None),
+            # Verification independence ledger (AUD-ASPICE-001 NC-03):
+            # per-step {level: isolated|degraded|none}.  ASPICE assessors need
+            # this to judge whether verification was independent.
+            "verification_independence": getattr(
+                self, "verification_independence", {}
+            ),
         }
 
 

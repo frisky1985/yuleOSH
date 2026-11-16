@@ -724,6 +724,11 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
             if _status == "failed":
                 _failed = True
                 break
+            # AUD-ASPICE-001 NC-01: 评审 retry/failed → 回灌生产者重做
+            _maybe_rework(
+                session, _registered, step_idx, step_key,
+                spec_path, project_dir, from_step, _step_callback,
+            )
             _ri += 1
 
         if _blocked:
@@ -752,6 +757,30 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
         # 永远读到 created。改为无条件 save, 让 failed/completed 都正确回写。
         session._save()
 
+        # AUD-ASPICE-001 NC-12: P0 步骤 skipped/not-run/failed 直接判 failed。
+        # 「跑完了但关键证据缺失」不能记为 completed —— 否则报告读成"基本通过"。
+        try:
+            from yuleosh.pipeline.p0 import describe as _p0_describe
+            from yuleosh.pipeline.p0 import violations as _p0_violations
+
+            # 已 failed 的运行无需二次升级（避免重复错误条目）；只有
+            # "跑完了但关键证据缺失" 才是本检查要拦截的情形。
+            _p0 = _p0_violations(
+                (key, session.steps[idx]["status"],
+                 str(session.steps[idx].get("detail") or ""))
+                for idx, key, *_rest in _registered
+            ) if session.status == "completed" else []
+            if _p0:
+                session.status = "failed"
+                for item in _p0:
+                    session.errors.append(
+                        f"P0 step not evidenced: {item['step']} ({item['status']})")
+                print(f"Pipeline: {session.status} ❌  "
+                      f"(P0 EVIDENCE MISSING — {_p0_describe(_p0)})")
+                session._save()
+        except Exception as _p0_err:  # noqa: BLE001 — 检查失败不阻断收尾
+            log.warning("P0 gate check failed (non-fatal): %s", _p0_err)
+
         # T5 / SYS-REQ-005: 权威追溯产物默认落盘 (详见 _emit_traceability_artifacts)。
         # P3: 追溯完整率同时纳入质量门（classify_run_outcome 的 traceability 参数）。
         _trace_result = _emit_traceability_artifacts(session)
@@ -775,10 +804,23 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
         # passed"。结论落盘后 dashboard / API 也能读到, 不静默。
         try:
             from yuleosh.pipeline.gates import classify_run_outcome
+            # AUD-ASPICE-001 NC-09: CL2/CL3 才强制人工签批，其余保持历史行为。
+            _signoffs = None
+            try:
+                from yuleosh.evidence.signoff import required_signoff_status
+                from yuleosh.project_meta import ProjectMeta
+
+                _meta = ProjectMeta.load(getattr(session, "project_dir", "") or "")
+                if _meta.requires_signoff:
+                    _signoffs = required_signoff_status(
+                        getattr(session, "project_dir", None))
+            except Exception as _so_err:  # noqa: BLE001 — 签批状态不得阻断收尾
+                log.debug("signoff status unavailable: %s", _so_err)
             session.gate_verdict = classify_run_outcome(
                 session.status, session.errors, _gate_summary,
                 config=getattr(session, "config", None),
-                traceability=(_trace_result or {}).get("summary"))
+                traceability=(_trace_result or {}).get("summary"),
+                signoffs=_signoffs)
             if session.status != "failed":
                 session._save()
         except Exception as _verdict_err:  # pragma: no cover - defensive  # noqa: BLE001
@@ -808,6 +850,8 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
             print(f"Pipeline: {session.status} 🎉 (GREEN — all gates passed)")
         elif _outcome == "unverified":
             print(f"Pipeline: {session.status} ⚠️  (UNVERIFIED — {_reason})")
+        elif _outcome == "awaiting-signoff":
+            print(f"Pipeline: {session.status} 🖊  (AWAITING SIGN-OFF — {_reason})")
         elif _outcome == "red":
             print(f"Pipeline: {session.status} ❌ (RED — {_reason})")
         else:
@@ -1046,6 +1090,26 @@ def _propagate_step_verdict(
                 session.errors.append(msg)
             session.updated_at = datetime.now().isoformat()
             log.warning("Step %s artifact verdict: failed (%s)", step_key, p.name)
+        elif verdict == "skipped" and str(data.get("category", "")) == (
+            "llm_provider_unavailable"
+        ):
+            # AUD-ASPICE-001 NC-12 / 假绿修复（2026-11-16）: LLM provider
+            # 不可用时 super-analysis / prd 写入 status=skipped 的降级产物，
+            # 但步骤状态此前仍停在 completed —— P0 证据缺失检查读不到，
+            # 401/402 下的空 PRD 会被当成"跑完了"。这里把步骤如实标 skipped，
+            # 让 P0 检查（skipped = 违规）与门禁 overlay 都能识别。
+            if step_idx < len(session.steps):
+                session.steps[step_idx]["status"] = "skipped"
+                session.steps[step_idx]["completed_at"] = (
+                    datetime.now().isoformat()
+                )
+                session.steps[step_idx]["detail"] = (
+                    f"[{step_key}] artifact status: SKIPPED "
+                    f"(llm_provider_unavailable, {p.name})"
+                )
+            log.warning(
+                "Step %s skipped: LLM provider unavailable (%s)", step_key, p.name
+            )
         elif verdict in ("retry", "warn", "warning"):
             msg = f"[{step_key}] step verdict: {verdict.upper()} ({p.name})"
             if msg not in session.errors:
@@ -1191,6 +1255,21 @@ def _invoke_step_callback(step_callback, session) -> None:
         log.debug("step_callback swallowed: %s", _ce)
 
 
+def _record_independence(session, step_key: str, step_status: str,
+                         artifact_path=None, reason: str = "") -> None:
+    """记录验证独立性等级（AUD-ASPICE-001 NC-03，非致命）。
+
+    分级结果写入 ``session.verification_independence`` 并随 ``session.json``
+    落盘，供证据包/评审判断「验证是否独立于实现」。
+    """
+    try:
+        from yuleosh.pipeline.verification_independence import record
+
+        record(session, step_key, step_status, artifact_path, reason)
+    except Exception as _e:  # noqa: BLE001 — 台账记录不得中断流水线
+        log.debug("independence record skipped for %s: %s", step_key, _e)
+
+
 def _execute_step(
     session: "PipelineSession",
     step_idx: int,
@@ -1220,6 +1299,11 @@ def _execute_step(
     if step_idx + 1 < from_step:
         session.steps[step_idx]["status"] = "skipped"
         session.steps[step_idx]["completed_at"] = datetime.now().isoformat()
+        # detail 携带豁免标记：断点续跑跳过不算 P0 证据缺失（NC-12）
+        session.steps[step_idx]["detail"] = "resume: before --from-step"
+        # AUD-ASPICE-001 NC-03: 断点续跑跳过的验证步骤独立级别记为 none
+        _record_independence(session, step_key, "skipped",
+                             reason="resume: before --from-step")
         # 注意: 函数名是 _emit_realtime_stage_skipped (Stage-6 修正拼写,
         # 之前写成 _emit_realtime_skipped —— 断点续跑时会 NameError 中断)。
         _emit_realtime_stage_skipped(
@@ -1257,6 +1341,7 @@ def _execute_step(
                 session.steps[step_idx]["detail"] = (
                     f"cached (指纹 {_fp[:10]})"
                 )
+                _record_independence(session, step_key, "completed", _restored)
                 print(f"  ♻️  [{agent}] {step_name} — cached "
                       f"(指纹 {_fp[:10]}), 复用产物")
                 _propagate_step_verdict(
@@ -1337,6 +1422,8 @@ def _execute_step(
 
         session.complete_step(step_idx, str(output_path))
         session.set_artifact(step_key, str(output_path))
+        # AUD-ASPICE-001 NC-03: 验证独立性分级（isolated / degraded / none）
+        _record_independence(session, step_key, "completed", str(output_path))
         # Realtime: 成功完成推 stage_end + file_produced (给前端「文件即时显示」)
         _rt_finished_at = datetime.now()
         _emit_realtime_stage_end(
@@ -1362,6 +1449,8 @@ def _execute_step(
         log.error(f"Step {step_idx+1} [{agent}] {step_name} failed: {e}")
         log.debug(traceback.format_exc())
         session.fail_step(step_idx, str(e))
+        # AUD-ASPICE-001 NC-03: 失败步骤没有任何验证证据 → 记为 none
+        _record_independence(session, step_key, "failed", reason=str(e))
         # Realtime: 失败也推 stage_end, 看板需要红点提示用户
         _rt_failed_at = datetime.now()
         _emit_realtime_stage_end(
@@ -1383,6 +1472,72 @@ def _execute_step(
                 reset_current_llm_call_context(_ctx_token)
             except Exception as _ctx_reset_err:  # noqa: BLE001
                 log.debug("reset LLM call context skipped: %s", _ctx_reset_err)
+
+
+def _artifact_status(path: Path) -> str:
+    """读取步骤产物的 ``status``（无产物/非 JSON 返回空串）。"""
+    try:
+        if not path.is_file():
+            return ""
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return str(data.get("status", "")).strip().lower() if isinstance(data, dict) else ""
+    except Exception:
+        return ""
+
+
+def _maybe_rework(session, registered, review_idx: int, review_key: str,
+                  spec_path, project_dir, from_step: int,
+                  step_callback=None) -> bool:
+    """评审未通过时回灌生产者重做（AUD-ASPICE-001 NC-01）。
+
+    仅在评审产物 verdict ∈ {retry, failed, incomplete} 时触发；
+    每对 (评审, 生产者) 最多 ``rework.MAX_REWORK_ROUNDS`` 轮，超出升级人工。
+    返回是否发生过返工。
+    """
+    try:
+        from yuleosh.pipeline.rework import MAX_REWORK_ROUNDS, clear, plan_rework
+    except Exception:  # pragma: no cover - 防御
+        return False
+
+    sdir = Path(getattr(session, "session_dir", "") or "")
+    if not str(sdir) or not sdir.is_dir():
+        return False
+    artifact = sdir / f"{review_key}.json"
+    review_entry = registered[review_idx] if review_idx < len(registered) else None
+    if review_entry is None:
+        return False
+
+    reworked = False
+    while True:
+        status = _artifact_status(artifact)
+        if status not in ("retry", "failed", "incomplete"):
+            break
+        plan = plan_rework(session, review_key, artifact)
+        if not plan:
+            log.warning(
+                "Rework for %s exhausted or unavailable (rounds=%s) — escalating",
+                review_key, getattr(session, "rework_rounds", {}).get(review_key),
+            )
+            break
+        producer_entry = next(
+            (e for e in registered if e[1] == plan["producer"]), None)
+        if producer_entry is None:
+            break
+        print(
+            f"  🔁 返工 {review_key} → {plan['producer']} "
+            f"(第 {plan['round']}/{MAX_REWORK_ROUNDS} 轮, "
+            f"{len(plan['findings'])} 条 findings)"
+        )
+        os.environ[plan["env_key"]] = plan["context"]
+        try:
+            _execute_step(session, *producer_entry,
+                          spec_path, project_dir, from_step, step_callback)
+            _execute_step(session, *review_entry,
+                          spec_path, project_dir, from_step, step_callback)
+        finally:
+            clear()
+        reworked = True
+    return reworked
 
 
 def _run_parallel_group(

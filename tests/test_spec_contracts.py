@@ -230,3 +230,43 @@ class TestCli:
     def test_cli_json(self, sample_spec_full):
         code = contracts_main([sample_spec_full, "--json"])
         assert code == 0
+
+
+class TestContractEvidenceGate:
+    """AUD-ASPICE-001 NC-04：契约校验不得空转。
+
+    RUN-A 实测：`contracts.json` 判 passed，但 interfaces.found=0、
+    guardrails.want=0、params.want=0，需求 ID 还重复了 3 次。
+    """
+
+    def test_declared_interfaces_but_none_extracted_fails(self, tmp_path):
+        p = tmp_path / "spec.md"
+        p.write_text(
+            "# spec\n\n## 1.5 接口契约\n\n"
+            "### hal_led.h\n\n（缺失代码块）\n\n"
+            "### SR-001\n- The system SHALL blink.\n",
+            encoding="utf-8",
+        )
+        r = contracts_check(str(p))
+        assert r["contracts"]["declares_interfaces"] is True
+        assert r["validation"]["passed"] is False
+        assert any("declares interface contracts" in m
+                   for m in r["validation"]["missing"])
+
+    def test_duplicate_requirement_ids_are_reported(self, tmp_path):
+        p = tmp_path / "spec.md"
+        p.write_text(
+            "# spec\n\n### SR-001\n- SHALL a.\n\n### SR-001\n- SHALL b.\n",
+            encoding="utf-8",
+        )
+        r = contracts_check(str(p))
+        assert r["validation"]["passed"] is False
+        assert r["validation"]["details"]["requirements"]["duplicates"] == ["SR-001"]
+
+    def test_spec_without_interface_section_still_passes(self, tmp_path):
+        """纯行为需求 spec 不应因为「没有接口契约节」被误判。"""
+        p = tmp_path / "spec.md"
+        p.write_text("# spec\n\n### SR-001\n- The system SHALL blink.\n",
+                     encoding="utf-8")
+        r = contracts_check(str(p))
+        assert r["validation"]["passed"] is True

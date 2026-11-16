@@ -1665,6 +1665,28 @@ def write_authoritative_traceability(project_dir: str,
         "coverage_pct": pct,
     }
 
+    # AUD-ASPICE-001 NC-07: AST 级实质校验 —— 注释里的 @req 只是声明，
+    # 与需求无任何词元重叠时标为 UNSUBSTANTIATED，不允许当作"已实现"。
+    ast_report: dict = {}
+    try:
+        from yuleosh.evidence.ast_trace import validate as _validate_ast_trace
+
+        ast_report = _validate_ast_trace(project_dir, spec_path)
+        summary["ast_trace_status"] = ast_report.get("status", "not-run")
+        unsubstantiated = {
+            (f.get("file"), str(f.get("requirement", "")).upper())
+            for f in ast_report.get("findings", [])
+            if f.get("rule") == "TRACE-UNSUBSTANTIATED"
+        }
+        for row in rows:
+            hits = [c for c in row.get("code_files", [])
+                    if (c, row["req_id"].upper()) in unsubstantiated]
+            if hits:
+                row["ast_substantiated"] = False
+    except Exception as _ast_err:  # noqa: BLE001 — AST 校验失败不阻断追溯产物
+        log.warning("AST trace validation failed (non-fatal): %s", _ast_err)
+        ast_report = {"status": "error", "error": str(_ast_err)}
+
     json_data = {
         "schema": "osh-traceability-v1",
         "source": "alm.traceability.generate_lrt",
@@ -1674,6 +1696,8 @@ def write_authoritative_traceability(project_dir: str,
         "requirements": rows,
         "sys_trace": lrt.get("sys_trace") or {},
         "gap_analysis": lrt.get("gap_analysis") or {},
+        # AUD-ASPICE-001 NC-07: AST 实质校验结果（声明 vs 实现）
+        "ast_trace": ast_report,
     }
     json_path = ev_dir / "traceability-matrix.json"
     json_path.write_text(json.dumps(json_data, indent=2, ensure_ascii=False),

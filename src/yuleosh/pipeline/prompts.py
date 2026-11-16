@@ -104,6 +104,22 @@ def get_prompt_version(step_key: str) -> str:
 # Step 1: S.U.P.E.R Analysis — 小明
 # ---------------------------------------------------------------------------
 
+
+def _rework_suffix() -> str:
+    """返工上下文（AUD-ASPICE-001 NC-01）。
+
+    编排器在重跑生产者前把评审 findings 写入 ``OSH_REWORK_FINDINGS``，
+    这里把它接到 system prompt 末尾；无返工时返回空串，零影响。
+    """
+    try:
+        from yuleosh.pipeline.rework import directive
+
+        d = directive()
+    except Exception:  # pragma: no cover - 循环导入兜底
+        return ""
+    return ("\n\n" + d) if d else ""
+
+
 def build_super_analysis_prompt(
     spec_content: str,
     spec_name: str,
@@ -289,7 +305,7 @@ def build_prd_prompt(
         f"Map each requirement to concrete user stories and acceptance criteria. "
         f"Assign priority (P0/P1/P2) to each requirement group."
     )
-    return system_prompt, user_prompt
+    return system_prompt + _rework_suffix(), user_prompt
 
 
 # ---------------------------------------------------------------------------
@@ -326,6 +342,11 @@ def build_architecture_prompt(
         "4. **Architecture Decision Records (ADRs)** — at least 3 meaningful ADRs "
         "with context, decision, consequences format\n"
         "5. **Key Design Considerations** — constraints, trade-offs, patterns used\n"
+        "6. **Design Units** — a Markdown table with the exact header "
+        "`| DES-ID | Module | Satisfies | Interfaces |`. Every requirement ID "
+        "in the specification MUST appear in at least one row's Satisfies "
+        "column; every row MUST use a `DES-xxx` identifier. Rows without a "
+        "satisfied requirement are invalid.\n"
         "Be specific and reference actual file paths and code elements.\n\n"
         "IMPORTANT — test infrastructure descriptions MUST match the Repository "
         "Facts below (test framework is machine-detected); do NOT invent a "
@@ -372,7 +393,7 @@ def build_architecture_prompt(
         + "\n".join(key_file_snippets[:10])
         + "\n\nWrite a comprehensive architecture document."
     )
-    return system_prompt, user_prompt
+    return system_prompt + _rework_suffix(), user_prompt
 
 
 # ---------------------------------------------------------------------------
@@ -497,7 +518,7 @@ def build_development_prompt(
 
     user_prompt = "\n\n---\n\n".join(context_parts)
     user_prompt += "\n\n---\n\nNow produce the development plan, task breakdown, and tech debt identification as Markdown."
-    return system_prompt, user_prompt
+    return system_prompt + _rework_suffix(), user_prompt
 
 
 # ---------------------------------------------------------------------------

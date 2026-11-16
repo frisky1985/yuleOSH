@@ -1,7 +1,7 @@
 # yuleOSH 满足 ASPICE 自动化的失败项与不符合项清单
 
 - 文档编号：AUD-ASPICE-001
-- 版本：v1.0（待评审）
+- 版本：v1.1（B1–B5 修复已落地，待额度恢复后补 3/3 连跑）
 - 日期：2026-11-16
 - 对照基线：《ASPICE 智能研发与合规审计平台 — 系统架构与详细设计说明书》v1.0（DOC-ASPICE-AI-SDD-001）
 - 判定口径
@@ -233,3 +233,51 @@
 3. **SSOT 迁移策略**：引入 Pydantic 是替换现有 Markdown OpenSpec，还是「Markdown 仍为人类可读视图、JSON 为唯一事实来源」的双向同步？
 4. **图谱方案**：沿用 SQLite KG 并补齐等价图查询，还是引入 Neo4j？
 5. **范围**：按 B1→B5 分批推进，还是一次性以「全 102 步跑绿」为目标？
+
+---
+
+## 7. v1.1 修复状态（2026-11-16）
+
+修复原则：**代码由 yuleOSH 自身产出，本清单只记录缺陷与验收证据**；不手写工程交付物。
+所有条目均以确定性单测/真实 CLI 运行取证，未使用 mock 冒充绿。
+
+| 条目 | 状态 | 修复落点 | 验收证据 |
+|---|---|---|---|
+| F-01 覆盖门禁硬失败 | ✅ 已修 | `step_handlers/c_coverage_gate.py`（排除 `artifacts/`；无 `CMakeLists.txt` → `skipped` + `gate_passed=False`） | `tests/test_aspice_gate_strictness.py`、RUN 实测跳过不再中断 |
+| F-02 POSIX 编译 4 轮未收敛 | ✅ 已修 | `codegen/compilers.py`（按平台注入 `-D_POSIX_C_SOURCE=200809L`，裸机不加） | `tests/test_b5_quantification.py::TestF02PosixMacro` |
+| F-03 LLM 4xx 无短路 | ✅ 已修（含两条路径） | `llm/providers/deepseek.py`、`llm/streaming.py`、`llm/client.py`（legacy 重试循环 + 流式降级分支） | 单测 `TestF03FatalHttpErrors` / `TestF03LegacyClientShortCircuit`；真实 402 运行由 7.3s/「after 3 retries」降为 2.5s/「non-retryable HTTP 402」 |
+| F-04 sys-* 无产物致 G0 不闭环 | ✅ 已修 | `pipeline/gates.py`（`_PROJECT_ARTIFACT_CANDIDATES` + project 产物哈希入账） | `tests/test_gate_artifact_coverage.py` |
+| NC-01 无评审返工闭环 | ✅ 已修 | `pipeline/rework.py` + `orchestrator._maybe_rework` + `prompts._rework_suffix` | `tests/test_rework_routing.py` |
+| NC-02 SSOT 无拓扑校验 | ✅ 已修 | `spec/ssot.py`（数据类 SSOT + `validate_topology`） | `tests/test_spec_ssot.py` |
+| NC-03 无物理隔离验证 | ✅ 已修（分级） | `pipeline/verification_independence.py`（`isolated`/`degraded`/`none`） | `tests/test_verification_independence.py` |
+| NC-04 契约校验空转 | ✅ 已修 | `spec_contracts.validate_contracts`（声明接口但 0 抽取、重复需求 ID） | `tests/test_spec_contracts.py`、`tests/test_aspice_negative_injection.py` |
+| NC-05 评审空输入自证通过 | ✅ 已修 | `review_arch.py`、`sys_layer.py` 结构门禁 | `tests/test_aspice_gate_strictness.py` |
+| NC-06 覆盖率不分 ASIL | ✅ 已修 | `c_coverage_gate._ASIL_POLICY`（QM 80/70，ASIL-A 100/90，B+ 100/100；无证据不 PASS） | `tests/test_aspice_gate_strictness.py::TestAsilCoveragePolicy` |
+| NC-07 追溯仅靠注释 | ✅ 已修 | `evidence/ast_trace.py`（AST 函数级追溯 + 需求文本实质匹配） | `tests/test_b4_evidence_pack.py::TestAstTrace` |
+| NC-08 无 ReqIF | ✅ 已修 | `evidence/reqif.py`（ReqIF 1.2 导出并回读自检） | `TestReqIF`；`human_report` 产出 `requirements.reqif` |
+| NC-09 无电子签批 | ✅ 已修 | `evidence/signoff.py`（G1/G2 人工签批，绑定产物 SHA-256 + git tag；未签 → `awaiting-signoff`） | `TestSignoff` / `TestGateAwaitingSignoff` |
+| NC-10 MISRA 无自愈 | ✅ 已修 | `rework.plan_rework`（misra-review → development，≤2 轮） | `tests/test_rework_routing.py` |
+| NC-11 平台模式漂移 | ✅ 已修 | `project_meta.py` + `codegen/prompts.py` + `engine._check_platform_layout` | `tests/test_project_meta.py` |
+| NC-12 skipped 不阻断 | ✅ 已修 | `pipeline/p0.py` + orchestrator P0 检查；**并修** LLM 降级产物 status=skipped 时步骤不再停留 completed | `tests/test_b5_quantification.py::TestNC12P0Blocking` |
+| NC-13 无 CL3 量化 | ✅ 已修 | `ci/kpi/history.py::summarize`（近 N 次成功率 / 门禁失败分布） | `TestNC13RunHistory` |
+| D-01 缺报告回退 0 可能 PASS | ✅ 已修 | `ci/kpi/report.py`（`INSUFFICIENT-EVIDENCE`） | `tests/test_b4_evidence_pack.py::TestD01MeasurementEvidence` |
+| D-02 SYS 从 spec 反推、漂移关闭 | ✅ 已修 | `sys_layer._write_sys_spec_alignment`（双向比对落盘）+ spec 解析器 ID 修复 | `TestD02SysSpecAlignment` |
+| D-03 关键词推断无标注 | ✅ 已修 | `sys_layer._infer_verification_method` 返回 `(method, inferred)` + 文档「⚠️ 推断 / 待确认」 | `TestD03InferenceLabelling` |
+
+### DoD 对照
+
+| DoD | 状态 | 说明 |
+|---|---|---|
+| 1. 同一需求连续 3 次 3/3 GREEN | ⛔ **外部阻塞** | DeepSeek 账户返回 `HTTP 402 Insufficient Balance`（实测 2026-11-16）。需充值或切换 provider 后执行；流水线已在 402 下正确判 RED 且 4xx 立即短路，不产生假绿。 |
+| 2. G0–G7 全 passed，0 skipped | ⏳ 依赖 DoD-1 | 门禁严格化已完成，待真实跑绿取证。 |
+| 3. 产物齐全并哈希入账 | ✅ | `artifact_hashes` 覆盖 session + project 产物（F-04）。 |
+| 4. 四层追溯 100% / 0 orphan | ✅（确定性可验） | `ast_trace` + `spec/ssot.validate_topology` 提供 0 orphan 判定。 |
+| 5. 证据包可独立审核 | ✅（未签批时为 `awaiting-signoff`） | ReqIF + signoff + XLSX 导出器。 |
+| 6. 三类反例必须拦红 | ✅ | `tests/test_aspice_negative_injection.py`（8 passed；每类含正向对照）。 |
+
+### 本轮验证记录
+
+- 专项回归：`378 passed`（门禁/契约/追溯/KPI/orchestrator/评审 20 个文件）。
+- 反例注入：`8 passed`（漏 SHALL 映射 / 接口不符 / 覆盖率不足，各含对照组）。
+- 真实 402 运行：`architecture` 2.5s 判 failed，`prd`/`super-analysis` 如实标 `skipped`，整条 run 判 RED，exit=1。
+- 未执行：前端 `tsc`/`jest`/`build`（仓库无 `node_modules`，需 `npm ci`）。

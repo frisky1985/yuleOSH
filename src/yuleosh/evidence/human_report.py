@@ -387,6 +387,21 @@ def write_human_evidence(session, gate_summary: Optional[dict] = None) -> dict[s
     if _write_excel(xlsx_path, session, stats, gates, steps, artifacts):
         written["excel"] = str(xlsx_path)
 
+    # AUD-ASPICE-001 NC-08: 需求基线导出 ReqIF 1.2（下游工具可导入），
+    # 生成后立即回读自检；解析失败不写键，避免把坏 XML 当成交付物。
+    spec_path = getattr(session, "spec_path", "")
+    if spec_path and Path(spec_path).is_file():
+        try:
+            from yuleosh.evidence.reqif import export_reqif
+
+            reqif = export_reqif(spec_path, out_dir / "requirements.reqif")
+            if reqif.get("valid"):
+                written["reqif"] = reqif["path"]
+            else:
+                log.warning("ReqIF export invalid: %s", reqif.get("error"))
+        except Exception as _reqif_err:  # noqa: BLE001 — 导出失败不阻断证据生成
+            log.warning("ReqIF export failed (non-fatal): %s", _reqif_err)
+
     return written
 
 

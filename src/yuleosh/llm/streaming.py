@@ -26,6 +26,12 @@ import urllib.error
 import urllib.request
 from typing import Any, Callable, Iterable, Iterator
 
+from yuleosh.llm.providers.base import (
+    LLMFatalError,
+    http_error_code,
+    is_fatal_http_error,
+)
+
 log = logging.getLogger("llm.streaming")
 
 # SSE 终止标记（OpenAI / DeepSeek / Ollama 兼容端点统一使用）。
@@ -163,6 +169,12 @@ def stream_request(
         except Exception as exc:  # noqa: BLE001 — 分类后重抛
             if isinstance(exc, (KeyboardInterrupt, SystemExit)):
                 raise
+            # AUD-ASPICE-001 F-03: 鉴权/额度类错误不重试。
+            if is_fatal_http_error(exc):
+                raise LLMFatalError(
+                    f"{provider} streaming request failed: non-retryable HTTP "
+                    f"{http_error_code(exc)}: {exc}"
+                ) from exc
             last_error = exc
             log.warning(
                 "%s stream attempt %d/%d failed: %s",
