@@ -62,6 +62,9 @@ yuleosh = [
     "templates/ecus/*/template.yaml",
     "templates/ecus/*/*.j2",
     "templates/ecus/*/**/*.j2",
+    "skills/packs/automotive/*.json",
+    "skills/packs/automotive/*.md",
+    "skills/packs/automotive/LICENSE",
 ]
 
 [tool.setuptools]

@@ -539,6 +539,14 @@ def _build_parser() -> argparse.ArgumentParser:
     sksub = p_skills.add_subparsers(dest="skills_sub")
     p_skills_list = sksub.add_parser("list", help="List all registered skills")
     p_skills_list.add_argument("--json", action="store_true", help="Output as JSON")
+    p_skills_list.add_argument("--tag", default=None,
+                               help="Only skills carrying this tag (e.g. automotive)")
+    p_skills_list.add_argument("--limit", type=int, default=0,
+                               help="Maximum entries to print (0 = all)")
+    p_skills_search = sksub.add_parser("search", help="Search skills by keyword")
+    p_skills_search.add_argument("keyword", help="Case-insensitive keyword")
+    p_skills_search.add_argument("--limit", type=int, default=20,
+                                 help="Maximum matches (default 20)")
     p_skills_show = sksub.add_parser("show", help="Show full skill content")
     p_skills_show.add_argument("name", help="Skill name (e.g. autosar-coding)")
 

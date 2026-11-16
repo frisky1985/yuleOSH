@@ -78,8 +78,10 @@ def test_assemble_includes_memory_rag_skills(monkeypatch, tmp_path):
     assert MEMORY_HEADER in ctx
     assert RAG_HEADER in ctx
     assert SKILLS_HEADER in ctx
-    # 顺序: memory → RAG → skills
-    assert ctx.index(MEMORY_HEADER) < ctx.index(RAG_HEADER) < ctx.index(SKILLS_HEADER)
+    # 顺序: skills → memory → RAG（技能优先保证预算）
+    # Skills first: domain guidance must survive the max_chars budget even
+    # when memory/RAG are both populated.
+    assert ctx.index(SKILLS_HEADER) < ctx.index(MEMORY_HEADER) < ctx.index(RAG_HEADER)
     # memory 内容命中
     assert "UART DMA driver uses channel 3" in ctx
 

@@ -62,6 +62,11 @@ class PipelineKnowledgeConfig:
     # Skills: global names plus per-step overrides (step_key → names).
     skills: list[str] = field(default_factory=list)
     skills_by_step: dict[str, list[str]] = field(default_factory=dict)
+    # Auto-select relevant bundled pack skills when no explicit names are set.
+    auto_skills: bool = True
+    auto_skills_limit: int = 3
+    auto_skills_categories: list[str] | None = None
+    skill_max_chars: int = 4000
     memory_max_chars: int = 1500
     rag_max_chars: int = 1500
 
@@ -80,6 +85,10 @@ class PipelineKnowledgeConfig:
             rag_sources=data.get("rag_sources") or None,
             skills=list(data.get("skills", []) or []),
             skills_by_step=dict(data.get("skills_by_step", {}) or {}),
+            auto_skills=bool(data.get("auto_skills", True)),
+            auto_skills_limit=int(data.get("auto_skills_limit", 3) or 3),
+            auto_skills_categories=data.get("auto_skills_categories") or None,
+            skill_max_chars=int(data.get("skill_max_chars", 4000) or 4000),
             memory_max_chars=int(data.get("memory_max_chars", 1500) or 1500),
             rag_max_chars=int(data.get("rag_max_chars", 1500) or 1500),
         )
@@ -206,17 +215,37 @@ def _assemble_rag(prompt: str, config: PipelineKnowledgeConfig, rag_engine=None)
         return ""
 
 
-def _assemble_skills(step_key: str, config: PipelineKnowledgeConfig) -> str:
-    """Skills section (non-fatal)."""
+def _assemble_skills(step_key: str, config: PipelineKnowledgeConfig,
+                     prompt: str = "") -> str:
+    """Skills section (non-fatal).
+
+    Explicit names from the config win.  When none are configured and
+    ``auto_skills`` is on, the bundled automotive pack is searched for
+    skills relevant to this pipeline step (see ``yuleosh.skills.selector``).
+    """
     if not config.inject_skills:
         return ""
     try:
         from yuleosh.skills.prompt import render_skills
 
         names = _resolve_skill_names(step_key, config)
+        auto = False
+        if not names and config.auto_skills:
+            from yuleosh.skills.selector import select_skill_names
+
+            names = select_skill_names(
+                step_key,
+                prompt,
+                limit=config.auto_skills_limit,
+                categories=config.auto_skills_categories,
+            )
+            auto = bool(names)
         if not names:
             return ""
-        rendered = render_skills(names)
+        rendered = render_skills(
+            names,
+            max_chars_per_skill=900 if auto else config.skill_max_chars,
+        )
         if not rendered:
             return ""
         return f"{SKILLS_HEADER}\n\n{rendered}".rstrip()
@@ -263,6 +292,26 @@ def _assemble_active(config: PipelineKnowledgeConfig, project_dir: str | Path) -
         return ""
 
 
+def assemble_skill_context(
+    *,
+    step_key: str,
+    prompt: str = "",
+    project_dir: str | Path | None = None,
+    config: PipelineKnowledgeConfig | None = None,
+) -> str:
+    """Skills-only context (used by code generators that bypass ``_call_llm``).
+
+    Returns "" on any failure — skill injection must never block generation.
+    """
+    if config is None:
+        config = (
+            load_pipeline_knowledge_config(project_dir)
+            if project_dir is not None
+            else PipelineKnowledgeConfig()
+        )
+    return _assemble_skills(step_key, config, prompt)
+
+
 def assemble_pipeline_knowledge(
     *,
     step_key: str,
@@ -274,9 +323,10 @@ def assemble_pipeline_knowledge(
 ) -> str:
     """Assemble the unified knowledge context for a pipeline step.
 
-    Order: memory → RAG → skills → active index. Total output is capped at
-    ``config.max_chars`` (truncated with a marker). Any source failure
-    degrades to that source's absence. Returns "" when nothing matches.
+    Order: skills → memory → RAG → active index.  Skills come first so the
+    domain guidance survives the ``max_chars`` budget even when memory/RAG
+    are populated.  Total output is capped at ``config.max_chars`` (truncated
+    with a marker).  Any source failure degrades to that source's absence.
     """
     if config is None:
         if project_dir is not None:
@@ -285,12 +335,12 @@ def assemble_pipeline_knowledge(
             config = PipelineKnowledgeConfig()
 
     sections: list[str] = []
+    if config.inject_skills:
+        sections.append(_assemble_skills(step_key, config, prompt))
     if config.inject_memory:
         sections.append(_assemble_memory(prompt, config, step_key=step_key))
     if config.inject_rag:
         sections.append(_assemble_rag(prompt, config, rag_engine=rag_engine))
-    if config.inject_skills:
-        sections.append(_assemble_skills(step_key, config))
     if project_dir is not None:
         sections.append(_assemble_active(config, project_dir))
 

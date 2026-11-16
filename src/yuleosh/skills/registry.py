@@ -49,17 +49,21 @@ class SkillRegistry:
 
     # ---- Core API ----------------------------------------------------
 
-    def register(self, skill: Skill, overwrite: bool = False) -> bool:
+    def register(self, skill: Skill, overwrite: bool = False,
+                 *, index: bool = True) -> bool:
         """Register a skill.
 
         Returns True when the skill was added, False when a skill with the
-        same name already exists and ``overwrite`` is False.
+        same name already exists and ``overwrite`` is False.  ``index=False``
+        skips the knowledge-index hook (bulk pack imports).
         """
         if skill.name in self._skills and not overwrite:
             log.debug("Skill %s already registered (overwrite=False)", skill.name)
             return False
         self._skills[skill.name] = skill
         log.debug("Skill %s registered (v%s)", skill.name, skill.version)
+        if not index:
+            return True
 
         # 方案 B (2026-08-07): 技能沉淀 → 自动入"待生效"知识索引。
         # 非致命：索引失败只记 warning，不影响技能注册本身。
@@ -75,11 +79,12 @@ class SkillRegistry:
             log.warning("Knowledge indexer hook failed (non-fatal): %s", e)
         return True
 
-    def register_many(self, skills: list[Skill], overwrite: bool = False) -> int:
+    def register_many(self, skills: list[Skill], overwrite: bool = False,
+                      *, index: bool = True) -> int:
         """Register several skills, returning how many were added."""
         added = 0
         for skill in skills:
-            if self.register(skill, overwrite=overwrite):
+            if self.register(skill, overwrite=overwrite, index=index):
                 added += 1
         return added
 
@@ -175,6 +180,13 @@ def get_registry() -> SkillRegistry:
         _registry.register_many(builtin_skills())
         # v3.10.0: 自动加载持久化技能（.osh/skills/skills.json，含 mattpocock 导入）
         _registry.load_default()
+        # v3.11.0: 内置第三方技能包（automotive-claude-code-agents，见 skills/packs.py）
+        try:
+            from yuleosh.skills.packs import install_automotive_pack
+
+            install_automotive_pack(_registry)
+        except Exception as e:  # noqa: BLE001 — pack must never block skills
+            log.warning("Bundled skill pack load failed (non-fatal): %s", e)
     return _registry
 
 

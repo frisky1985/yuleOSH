@@ -675,6 +675,25 @@ class CodegenEngine:
 
             client = chat_completion
         prompt = user_prompt + repair_context
+        # Skill injection: the codegen path bypasses pipeline `_call_llm`,
+        # so step-aware bundled skills must be spliced here explicitly.
+        if not getattr(session, "mock_mode", False):
+            try:
+                from yuleosh.pipeline.knowledge_injection import assemble_skill_context
+                from yuleosh.pipeline.step_context import get_step_key
+
+                step_key = (get_step_key()
+                            or getattr(session, "pipeline_knowledge_step_key", "")
+                            or "development")
+                skills = assemble_skill_context(
+                    step_key=step_key,
+                    prompt=prompt,
+                    project_dir=getattr(session, "project_dir", None),
+                )
+                if skills:
+                    system_prompt = f"{skills}\n\n{system_prompt}"
+            except Exception as e:  # noqa: BLE001 — never block codegen
+                log.warning("Codegen skill injection failed (non-fatal): %s", e)
         # Codegen prompts carry the full spec + PRD + architecture + seed
         # sources and generate up to max_tokens (default 16000) — DeepSeek
         # regularly exceeds the 60s chat_completion default on long outputs.
