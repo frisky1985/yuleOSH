@@ -46,6 +46,13 @@ import {
   sectionOf,
   type TreeNode,
 } from "@/lib/artifact-sections";
+import {
+  REVIEW_TONES,
+  REVIEW_TONE_META,
+  countReviewTones,
+  reviewToneByArtifact,
+  type ReviewTone,
+} from "@/lib/review-status";
 import { CodeBlock } from "@/components/code-block";
 import { AccountInfoDialog } from "@/components/account/account-info-dialog";
 import { UserSettingsDialog } from "@/components/account/user-settings-dialog";
@@ -543,6 +550,11 @@ export default function DesktopWorkspacePage() {
     if (activeId) loadReviews();
   }, [activeId, loadReviews]);
 
+  // 产物树评审标记：每个文件取最新一条评审结果，映射成状态色。
+  const reviewTones = useMemo(() => reviewToneByArtifact(reviews), [reviews]);
+  const reviewCounts = useMemo(() => countReviewTones(reviewTones), [reviewTones]);
+  const reviewedTotal = REVIEW_TONES.reduce((n, t) => n + reviewCounts[t], 0);
+
   // ── Run pipeline ───────────────────────────────────────────────────────
   const handleRunPipeline = async () => {
     if (!activeId || running) return;
@@ -839,6 +851,21 @@ export default function DesktopWorkspacePage() {
                 <Filter className="w-3 h-3" /> 有产物
               </button>
             </div>
+            {reviewedTotal > 0 && (
+              <div
+                data-testid="review-legend"
+                className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-[#64748b]"
+                title={`${reviewedTotal} 个产物已有评审结论`}
+              >
+                {REVIEW_TONES.filter((tone) => reviewCounts[tone] > 0).map((tone) => (
+                  <span key={tone} className="flex items-center gap-1">
+                    <span className={`h-1.5 w-1.5 rounded-full ${REVIEW_TONE_META[tone].dot}`} />
+                    {REVIEW_TONE_META[tone].label}
+                    <span className="tabular-nums text-[#475569]">{reviewCounts[tone]}</span>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* 5 大固定分区 */}
@@ -890,6 +917,7 @@ export default function DesktopWorkspacePage() {
                         depth={0}
                         onSelect={handleSelectFile}
                         selectedFile={selectedFile}
+                        reviewTones={reviewTones}
                       />
                     )}
                   </div>
@@ -1429,11 +1457,14 @@ function ArtifactTreeLite({
   depth = 0,
   onSelect,
   selectedFile,
+  reviewTones,
 }: {
   nodes: TreeNode[];
   depth?: number;
   onSelect: (path: string) => void;
   selectedFile: string | null;
+  /** 产物路径 → 最新评审状态色，未评审的文件不显示圆点。 */
+  reviewTones?: Record<string, ReviewTone>;
 }) {
   // 目录默认不展开（分区已展开后，再逐层展开文件）
   const [openDirs, setOpenDirs] = useState<Record<string, boolean>>({});
@@ -1444,6 +1475,7 @@ function ArtifactTreeLite({
         const isDir = node.type === "dir";
         const isOpen = openDirs[node.path] ?? false;
         const hasChildren = isDir && (node.children?.length ?? 0) > 0;
+        const tone = isDir ? null : reviewTones?.[node.path];
         return (
           <div key={node.path}>
             <div
@@ -1469,7 +1501,15 @@ function ArtifactTreeLite({
               ) : (
                 <FileIcon className="w-3 h-3 text-[#64748b]" />
               )}
-              <span className="truncate">{node.name}</span>
+              <span className="min-w-0 flex-1 truncate">{node.name}</span>
+              {tone && (
+                <span
+                  data-testid={`review-dot-${node.path}`}
+                  title={`评审状态：${REVIEW_TONE_META[tone].label}`}
+                  aria-label={`评审状态：${REVIEW_TONE_META[tone].label}`}
+                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${REVIEW_TONE_META[tone].dot}`}
+                />
+              )}
             </div>
             {isDir && isOpen && hasChildren && (
               <ArtifactTreeLite
@@ -1477,6 +1517,7 @@ function ArtifactTreeLite({
                 depth={depth + 1}
                 onSelect={onSelect}
                 selectedFile={selectedFile}
+                reviewTones={reviewTones}
               />
             )}
           </div>
