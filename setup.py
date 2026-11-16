@@ -13,7 +13,7 @@ setup(
     description="嵌入式AI开发全流程平台 — OpenSpec+Superpowers+Harness Engineering 三位一体",
     packages=find_packages(where=["src"]),
     package_dir={"": "src"},
-    python_requires=">=3.12,<3.14",
+    python_requires=">=3.12,<3.15",
     install_requires=[
         "pyyaml>=6.0",
         "msgpack>=1.2.1",  # GHSA-6v7p-g79w-8964
