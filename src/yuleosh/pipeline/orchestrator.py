@@ -399,6 +399,79 @@ def _emit_traceability_artifacts(session) -> Optional[dict]:
     return result
 
 
+def _gate_artifacts(session, gate_key: str) -> list[str]:
+    """某门禁下已落盘产物路径（来自 session.steps[*].output_path）。"""
+    try:
+        from yuleosh.pipeline.gates import GATES
+    except Exception:  # pragma: no cover - 极端导入失败
+        return []
+    keys = next((g["step_keys"] for g in GATES if g["gate"] == gate_key), [])
+    out: list[str] = []
+    for step in getattr(session, "steps", None) or []:
+        if step.get("name") in keys and step.get("output_path"):
+            out.append(step["output_path"])
+    return out
+
+
+def _prepare_signoff_recommendations(session, gate_summary, signoffs) -> dict:
+    """为未签批的必签门禁生成 agent 预审建议（advisory，无放行权）。
+
+    责任分层（2026-11-16）: agent 只能给出 ``recommend-approve`` /
+    ``recommend-reject``，**不能**让门禁变绿 —— 放行仍需具名责任人签批
+    （见 ``signoff.record_signoff``）。预审建议把"读一堆证据再判断"压缩成
+    "看一眼结论再批准"，但受控项仍是人的签名。
+    """
+    written: dict[str, str] = {}
+    try:
+        from yuleosh.evidence.signoff import write_recommendation
+        from yuleosh.pipeline.verification_independence import summarize
+    except Exception as exc:  # noqa: BLE001
+        log.debug("recommendation module unavailable: %s", exc)
+        return written
+
+    gates = {g.get("gate"): g for g in (gate_summary or {}).get("gates", [])}
+    try:
+        indep = summarize(session)
+    except Exception:  # noqa: BLE001
+        indep = {"counts": {}, "degraded": [], "not_verified": []}
+    counts = indep.get("counts") or {}
+    level = "isolated" if counts.get("isolated") else (
+        "degraded" if counts.get("degraded") else "none")
+
+    for gate, status in (signoffs or {}).items():
+        if status.get("signed"):
+            continue
+        entry = gates.get(gate, {})
+        gate_status = entry.get("status", "not-run")
+        blocking: list[str] = []
+        if gate_status != "passed":
+            blocking.append(f"{gate} gate status is {gate_status}")
+        if status.get("reason"):
+            blocking.append(f"human sign-off: {status['reason']}")
+        if indep.get("degraded"):
+            blocking.append(
+                "degraded verification independence: "
+                + ", ".join(indep["degraded"]))
+        risks = [f"not independently verified: {k}"
+                 for k in indep.get("not_verified", [])]
+        try:
+            path = write_recommendation(
+                getattr(session, "project_dir", "") or "", gate,
+                artifacts=_gate_artifacts(session, gate),
+                verdict=("recommend-reject" if blocking
+                         else "recommend-approve"),
+                blocking=blocking, residual_risks=risks,
+                independence=level,
+                notes=("由流水线收尾阶段自动生成；建议基于本轮门禁状态、"
+                       "产物摘要与验证独立性台账。"),
+            )
+            written[gate] = str(path)
+            log.info("Sign-off recommendation: %s -> %s", gate, path)
+        except Exception as exc:  # noqa: BLE001 — 预审建议不得阻断收尾
+            log.warning("recommendation write failed for %s: %s", gate, exc)
+    return written
+
+
 def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optional[Callable] = None,
                 mock: bool = False, profile: Optional[str] = None, org_id: int = 0,
                 user_id: int | None = None, user_email: str | None = None,
@@ -814,6 +887,9 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
                 if _meta.requires_signoff:
                     _signoffs = required_signoff_status(
                         getattr(session, "project_dir", None))
+                    # agent 预审建议（advisory）：让人的动作只剩"看结论 + 签批"。
+                    _prepare_signoff_recommendations(
+                        session, _gate_summary, _signoffs)
             except Exception as _so_err:  # noqa: BLE001 — 签批状态不得阻断收尾
                 log.debug("signoff status unavailable: %s", _so_err)
             session.gate_verdict = classify_run_outcome(

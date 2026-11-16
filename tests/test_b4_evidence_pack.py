@@ -136,6 +136,138 @@ class TestSignoff:
         assert _main(["verify", "--project", str(tmp_path), "--gate", "G2"]) == 1
 
 
+class TestAgentPreReview:
+    """agent 预审 + 人批准：agent 有否决权，没有放行权（CL2 责任分层）。"""
+
+    def _artifact(self, tmp_path: Path) -> Path:
+        artifact = tmp_path / "docs" / "prd.md"
+        artifact.parent.mkdir(parents=True, exist_ok=True)
+        artifact.write_text("# prd baseline\n", encoding="utf-8")
+        return artifact
+
+    def test_agent_identity_cannot_sign(self, tmp_path):
+        from yuleosh.evidence.signoff import write_recommendation
+
+        artifact = self._artifact(tmp_path)
+        rec = write_recommendation(tmp_path, "G1", [artifact])
+        for agent_name in ("agent:arch-reviewer", "AI:independent", "bot/ci"):
+            with pytest.raises(ValueError):
+                record_signoff(tmp_path, "G1", artifact, reviewer=agent_name,
+                               based_on_recommendation=rec, tag=False)
+
+    def test_recommendation_alone_never_turns_gate_green(self, tmp_path):
+        from yuleosh.evidence.signoff import write_recommendation
+
+        artifact = self._artifact(tmp_path)
+        rec = write_recommendation(tmp_path, "G1", [artifact],
+                                   independence="isolated")
+        assert json.loads(rec.read_text(encoding="utf-8"))["verdict"] == \
+            "recommend-approve"
+        assert verify_gate(tmp_path, "G1")["signed"] is False
+        verdict = classify_run_outcome(
+            "completed", [], {
+                "worst_gate_status": "passed",
+                "gates": [{"gate": "G1", "status": "passed"},
+                          {"gate": "G2", "status": "passed"}],
+            },
+            signoffs={"G1": verify_gate(tmp_path, "G1"),
+                      "G2": {"signed": False, "reason": "no sign-off record"}})
+        assert verdict["outcome"] == "awaiting-signoff"
+
+    def test_human_signoff_referencing_recommendation_is_traceable(self, tmp_path):
+        from yuleosh.evidence.signoff import write_recommendation
+
+        artifact = self._artifact(tmp_path)
+        rec = write_recommendation(tmp_path, "G1", [artifact],
+                                   independence="isolated")
+        record_signoff(tmp_path, "G1", artifact, reviewer="alice",
+                       role="requirements-owner", tag=False,
+                       based_on_recommendation=rec)
+        verdict = verify_gate(tmp_path, "G1")
+        assert verdict["signed"] is True
+        assert verdict["basis"]["verdict"] == "recommend-approve"
+        assert verdict["basis"]["intact"] is True
+
+    def test_override_of_reject_requires_reason(self, tmp_path):
+        from yuleosh.evidence.signoff import write_recommendation
+
+        artifact = self._artifact(tmp_path)
+        rec = write_recommendation(tmp_path, "G1", [artifact],
+                                   blocking=["G1 gate status is skipped"])
+        assert json.loads(rec.read_text(encoding="utf-8"))["verdict"] == \
+            "recommend-reject"
+        with pytest.raises(ValueError):
+            record_signoff(tmp_path, "G1", artifact, reviewer="alice",
+                           based_on_recommendation=rec, tag=False)
+        record = record_signoff(tmp_path, "G1", artifact, reviewer="alice",
+                                based_on_recommendation=rec, tag=False,
+                                override_reason="blocker 已关闭，见 CR-42")
+        assert record["override_reason"] == "blocker 已关闭，见 CR-42"
+        assert verify_gate(tmp_path, "G1")["basis"]["verdict"] == \
+            "recommend-reject"
+
+    def test_tampered_recommendation_breaks_signoff(self, tmp_path):
+        from yuleosh.evidence.signoff import write_recommendation
+
+        artifact = self._artifact(tmp_path)
+        rec = write_recommendation(tmp_path, "G1", [artifact])
+        record_signoff(tmp_path, "G1", artifact, reviewer="alice", tag=False,
+                       based_on_recommendation=rec)
+        assert verify_gate(tmp_path, "G1")["signed"] is True
+        body = json.loads(rec.read_text(encoding="utf-8"))
+        body["verdict"] = "recommend-approve"
+        body["blocking_items"] = []
+        body["notes"] = "rewritten after approval"
+        rec.write_text(json.dumps(body, indent=2), encoding="utf-8")
+        verdict = verify_gate(tmp_path, "G1")
+        assert verdict["signed"] is False
+        assert "recommendation changed" in verdict["reason"]
+
+    def test_missing_artifact_becomes_blocking(self, tmp_path):
+        from yuleosh.evidence.signoff import write_recommendation
+
+        rec = write_recommendation(tmp_path, "G2",
+                                   [tmp_path / "docs" / "missing.md"])
+        body = json.loads(rec.read_text(encoding="utf-8"))
+        assert body["verdict"] == "recommend-reject"
+        assert any("artifact missing" in b for b in body["blocking_items"])
+        assert body["release_authority"] == "none"
+
+    def test_pipeline_writes_recommendation_for_unsigned_gates(self, tmp_path):
+        from yuleosh.pipeline.orchestrator import _prepare_signoff_recommendations
+
+        artifact = self._artifact(tmp_path)
+        session = SimpleNamespace(
+            project_dir=str(tmp_path),
+            steps=[{"name": "prd", "output_path": str(artifact)}],
+            verification_independence={})
+        written = _prepare_signoff_recommendations(
+            session, {"gates": [{"gate": "G1", "status": "passed"},
+                                {"gate": "G2", "status": "skipped"}]},
+            {"G1": {"signed": False, "reason": "no sign-off record"},
+             "G2": {"signed": True}})
+        assert set(written) == {"G1"}
+        body = json.loads(Path(written["G1"]).read_text(encoding="utf-8"))
+        assert body["verdict"] == "recommend-reject"
+        assert body["artifacts"][0]["sha256"]
+        assert "no sign-off record" in " ".join(body["blocking_items"])
+
+    def test_cli_recommend_then_record(self, tmp_path, capsys):
+        from yuleosh.evidence.signoff import _main
+
+        artifact = self._artifact(tmp_path)
+        assert _main(["recommend", "--project", str(tmp_path), "--gate", "G1",
+                      "--artifact", str(artifact)]) == 0
+        rec = Path(capsys.readouterr().out.strip())
+        assert rec.is_file()
+        assert _main(["record", "--project", str(tmp_path), "--gate", "G1",
+                      "--artifact", str(artifact), "--reviewer", "alice",
+                      "--based-on-recommendation", str(rec),
+                      "--no-tag"]) == 0
+        capsys.readouterr()
+        assert _main(["verify", "--project", str(tmp_path), "--gate", "G1"]) == 0
+
+
 class TestGateAwaitingSignoff:
     SUMMARY = {
         "worst_gate_status": "passed",

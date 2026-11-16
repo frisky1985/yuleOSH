@@ -144,6 +144,14 @@
 - **违背**：SDD §4.4（角色权限分离、联合哈希、git tag 固化）。
 - **修复落点**：`src/yuleosh/evidence/` 新增 signoff 模块；`api` 增加签批端点；复用现有哈希计算。
 - **验收**：Gate 2 未签批时禁止判定为「可发布」；签批后生成 tag 且日志可校验哈希一致。
+- **责任分层（2026-11-16 补充）**：**agent 有否决权，没有放行权**。
+  `write_recommendation()` 产出 `recommend-approve` / `recommend-reject` 预审建议
+  （含产物摘要、阻断项、残余风险、验证独立性），流水线收尾阶段自动为未签批门禁
+  生成；人签批时用 `based_on_recommendation` 引用该文件并记录其 SHA-256。
+  若预审为 reject 而人仍批准，必须填写 `override_reason`（风险接受）；
+  `agent:/ai:/bot:/llm:` 等身份前缀不得作为签批人（`ValueError`）；
+  预审建议被删除或改写后，签批自动失效（证据链断裂）。
+  依据：SUP.8 基线由"被授权的人"批准；批准 = 可追责，agent 无责任主体与能力记录。
 
 ### NC-10 · P1 · MISRA 无自愈循环，缺失即跳过
 
@@ -255,7 +263,7 @@
 | NC-06 覆盖率不分 ASIL | ✅ 已修 | `c_coverage_gate._ASIL_POLICY`（QM 80/70，ASIL-A 100/90，B+ 100/100；无证据不 PASS） | `tests/test_aspice_gate_strictness.py::TestAsilCoveragePolicy` |
 | NC-07 追溯仅靠注释 | ✅ 已修 | `evidence/ast_trace.py`（AST 函数级追溯 + 需求文本实质匹配） | `tests/test_b4_evidence_pack.py::TestAstTrace` |
 | NC-08 无 ReqIF | ✅ 已修 | `evidence/reqif.py`（ReqIF 1.2 导出并回读自检） | `TestReqIF`；`human_report` 产出 `requirements.reqif` |
-| NC-09 无电子签批 | ✅ 已修 | `evidence/signoff.py`（G1/G2 人工签批，绑定产物 SHA-256 + git tag；未签 → `awaiting-signoff`） | `TestSignoff` / `TestGateAwaitingSignoff` |
+| NC-09 无电子签批 | ✅ 已修 | `evidence/signoff.py`（G1/G2 人工签批，绑定产物 SHA-256 + git tag；未签 → `awaiting-signoff`；agent 预审建议 `write_recommendation` 不可代签，reject 后批准需 `override_reason`，建议被改则签批失效） | `TestSignoff` / `TestAgentPreReview` / `TestGateAwaitingSignoff` |
 | NC-10 MISRA 无自愈 | ✅ 已修 | `rework.plan_rework`（misra-review → development，≤2 轮） | `tests/test_rework_routing.py` |
 | NC-11 平台模式漂移 | ✅ 已修 | `project_meta.py` + `codegen/prompts.py` + `engine._check_platform_layout` | `tests/test_project_meta.py` |
 | NC-12 skipped 不阻断 | ✅ 已修 | `pipeline/p0.py` + orchestrator P0 检查；**并修** LLM 降级产物 status=skipped 时步骤不再停留 completed | `tests/test_b5_quantification.py::TestNC12P0Blocking` |
