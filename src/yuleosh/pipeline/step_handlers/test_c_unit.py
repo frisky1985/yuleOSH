@@ -312,6 +312,12 @@ def run_c_test_suite(project_dir: str | Path,
             # 彻底避免跨测试重复符号; 单测试文件项目行为不变。
             compiled_ok = True
             per_test_log = []
+            # 2026-11-17: gcc 回退须把被测实现源文件链进每个测试二进制,
+            # 否则测试文件调用的实现函数 (led_blink_step 等) 报 undefined
+            # reference。排除测试文件自身 (避免重复符号)。若某测试 #include
+            # 了实现 .c, 该文件会重复定义 → 编译失败, 由 LLM 修复
+            # (测试不应 include .c)。
+            impl_sources = [f for f in c_files if f not in c_test_files]
             for tf in c_test_files:
                 stem = Path(tf).stem
                 tmp_bin = os.path.join(
@@ -322,6 +328,17 @@ def run_c_test_suite(project_dir: str | Path,
                 compile_cmd = ["gcc", "-o", tmp_bin, str(tf)]
                 if unity_src.exists():
                     compile_cmd.append(str(unity_src))
+                # 排除该测试已 #include 的实现 .c, 避免 duplicate symbol
+                tf_text = ""
+                try:
+                    tf_text = Path(tf).read_text(encoding="utf-8", errors="replace")
+                except OSError:
+                    pass
+                link_impl = [
+                    f for f in impl_sources
+                    if Path(f).name not in tf_text
+                ]
+                compile_cmd += [str(f) for f in link_impl]
                 compile_cmd += inc_flags + tf_defs + link_flags + ["-lm", "-Wall", "-Wextra"]
                 cr = safe_subprocess_run(compile_cmd, capture_output=True, text=True, timeout=60)
                 per_test_log.append(

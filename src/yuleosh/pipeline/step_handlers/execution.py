@@ -686,6 +686,17 @@ def step_codegen_deploy(session: PipelineSession) -> str:
     deployed = []
     skipped_empty = []
 
+    # ── Fresh-project full-tree deploy (2026-11-17) ──────────────────
+    # 当项目根目录没有 CMakeLists.txt（全新工程，无既有构建脚手架）时，
+    # codegen 已在 artifacts/generated-code/ 下产出完整可验证工程
+    # （CMakeLists.txt + include/ + src/ + tests/ + demo/），此时须整树
+    # 部署，否则 test-codegen 因找不到根 CMakeLists.txt 而跳过，且
+    # src/*.c 因缺少 include/ 头文件而无法编译。
+    # 若项目已有根 CMakeLists.txt（既有 harness），保持原行为仅部署
+    # src/ 以保护宿主测试/覆盖率构建。
+    fresh_project = not (project_dir / "CMakeLists.txt").is_file()
+    deploy_root = gen_dir if fresh_project else src_gen
+
     # ── 行为护栏 (2026-08-13) ──────────────────────────────────────
     # 编译+API 双护栏捕获不了"逻辑正确但行为回归"的代码 (LLM 删除既有
     # 状态机/reset/FAULT 处理 → 编译通过但测试失败)。行为护栏在部署前
@@ -733,7 +744,7 @@ def step_codegen_deploy(session: PipelineSession) -> str:
 
     if guard_enabled:
         deployed_candidates = [
-            p for p in sorted(src_gen.rglob("*"))
+            p for p in sorted(deploy_root.rglob("*"))
             if p.is_file() and p.stat().st_size > 0
         ]
     else:
@@ -752,11 +763,11 @@ def step_codegen_deploy(session: PipelineSession) -> str:
     else:
         guard_baseline = None
 
-    for src_file in sorted(src_gen.rglob("*")):
+    for src_file in sorted(deploy_root.rglob("*")):
         if src_file.is_dir():
             continue
         if src_file.stat().st_size == 0:
-            skipped_empty.append(str(src_file.relative_to(src_gen)))
+            skipped_empty.append(str(src_file.relative_to(deploy_root)))
             continue
         # relative to gen_dir so the generated tree keeps its src/ prefix
         # (relative_to(src_gen) would drop it and deploy to <proj>/app/…)
@@ -901,7 +912,8 @@ def step_codegen_deploy(session: PipelineSession) -> str:
     except Exception as e:  # 证据文件写入失败不阻断部署本身
         log.warning("Cannot write deploy-changes.json evidence: %s", e)
 
-    print(f"  ✅ [小明] codegen-deploy: {len(deployed)} files → src/ "
+    scope = "full tree" if fresh_project else "src/"
+    print(f"  ✅ [小明] codegen-deploy: {len(deployed)} files → {scope} "
           f"(skipped {len(skipped_empty)} empty)")
     for f in deployed:
         log.info("  deployed: %s", f)

@@ -155,7 +155,7 @@ class TestGeneration:
         assert calls["n"] == 1
         # 测试文件与构建接线都落盘
         assert (project / "tests" / "test_demo.c").is_file()
-        assert "add_test(NAME test_demo" in (
+        assert "add_test(NAME osh_unit_test_demo" in (
             project / "tests" / "CMakeLists.txt").read_text()
         root = (project / "CMakeLists.txt").read_text()
         assert "enable_testing()" in root and "ENABLE_COVERAGE" in root
