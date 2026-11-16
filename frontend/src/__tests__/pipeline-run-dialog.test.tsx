@@ -123,7 +123,17 @@ describe("PipelineRunDialog", () => {
       },
     }));
 
-    render(<PipelineRunDialog open onOpenChange={jest.fn()} projectId="p1" jobId="job-abc123456" />);
+    const onInspectLayer = jest.fn();
+    const onOpenChange = jest.fn();
+    render(
+      <PipelineRunDialog
+        open
+        onOpenChange={onOpenChange}
+        onInspectLayer={onInspectLayer}
+        projectId="p1"
+        jobId="job-abc123456"
+      />,
+    );
 
     expect(await screen.findByTestId("code-generation-summary")).toBeInTheDocument();
     expect(screen.getByText("已生成并部署")).toBeInTheDocument();
@@ -131,6 +141,10 @@ describe("PipelineRunDialog", () => {
     expect(screen.getByText("Application SWC")).toBeInTheDocument();
     expect(screen.getByText("ECU Abstraction")).toBeInTheDocument();
     expect(screen.getByText(/12 个源文件通过编译、分层目录与依赖校验/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("inspect-layer-mcal"));
+    expect(onInspectLayer).toHaveBeenCalledWith("src/bsw/mcal");
+    expect(onOpenChange.mock.calls[0][0]).toBe(false);
   });
 
   it("模型修复中显示当前尝试次数与问题数", async () => {

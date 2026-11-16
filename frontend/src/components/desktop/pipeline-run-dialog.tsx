@@ -59,6 +59,7 @@ interface PipelineRunDialogProps {
   jobId: string | null;
   running?: boolean;
   onRerun?: () => void;
+  onInspectLayer?: (path: string) => void;
 }
 
 const STATUS_META: Record<string, { label: string; className: string }> = {
@@ -114,6 +115,7 @@ export function PipelineRunDialog({
   jobId,
   running,
   onRerun,
+  onInspectLayer,
 }: PipelineRunDialogProps) {
   const [detail, setDetail] = useState<PipelineRunDetail | null>(null);
   const [error, setError] = useState("");
@@ -251,14 +253,21 @@ export function PipelineRunDialog({
                 {(codegen.layers?.length ?? 0) > 0 && (
                   <div className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-5">
                     {codegen.layers?.map((layer) => (
-                      <div
+                      <button
                         key={layer.key}
-                        title={layer.path}
-                        className="rounded border border-[#1e293b] bg-[#0b1020] px-2 py-1.5"
+                        type="button"
+                        data-testid={`inspect-layer-${layer.key}`}
+                        title={onInspectLayer ? `筛选并查看 ${layer.path}` : layer.path}
+                        disabled={!onInspectLayer || layer.files === 0}
+                        onClick={() => {
+                          onInspectLayer?.(layer.path);
+                          onOpenChange(false);
+                        }}
+                        className="rounded border border-[#1e293b] bg-[#0b1020] px-2 py-1.5 text-left transition-colors enabled:hover:border-[#1677ff]/60 enabled:hover:bg-[#1677ff]/10 disabled:cursor-default"
                       >
                         <div className="truncate text-[10px] text-[#94a3b8]">{layer.name}</div>
                         <div className="mt-0.5 text-xs font-semibold text-[#cbd5e1]">{layer.files} 文件</div>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 )}
