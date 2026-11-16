@@ -550,6 +550,19 @@ def _build_parser() -> argparse.ArgumentParser:
     p_skills_show = sksub.add_parser("show", help="Show full skill content")
     p_skills_show.add_argument("name", help="Skill name (e.g. autosar-coding)")
 
+    # agents: bundled role-constraint packs (automotive)
+    p_agents = sub.add_parser("agents", help="Agent 角色约束包管理")
+    asub = p_agents.add_subparsers(dest="agents_sub")
+    asub.add_parser("list", help="List bundled agent role packs")
+    p_agents_install = asub.add_parser(
+        "install-pack", help="Install a role pack into .yuleosh/agents/")
+    p_agents_install.add_argument("--pack", default="automotive",
+                                  help="Pack name (default: automotive)")
+    p_agents_install.add_argument("--project", default=".",
+                                  help="Target project root (default: cwd)")
+    p_agents_install.add_argument("--force", action="store_true",
+                                  help="Overwrite existing role files")
+
     # knowledge (方案 B, v3.12.x): 沉淀知识索引 pending/approve/reject/audit
     from yuleosh.knowledge.cli import build_knowledge_subparser
 
@@ -973,6 +986,10 @@ def main():
     elif args.command == "skills":
         from yuleosh.skills.cli import handle_skills_command
         sys.exit(handle_skills_command(args))
+
+    elif args.command == "agents":
+        from yuleosh.agent_packs import handle_agents_command
+        sys.exit(handle_agents_command(args))
 
     elif args.command == "knowledge":
         # 方案 B (2026-08-07): 沉淀知识索引 pending/approve/reject/audit

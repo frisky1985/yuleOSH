@@ -65,6 +65,10 @@ yuleosh = [
     "skills/packs/automotive/*.json",
     "skills/packs/automotive/*.md",
     "skills/packs/automotive/LICENSE",
+    "agent_packs/automotive/*.json",
+    "agent_packs/automotive/*.md",
+    "agent_packs/automotive/LICENSE",
+    "agent_packs/automotive/roles/*.md",
 ]
 
 [tool.setuptools]
