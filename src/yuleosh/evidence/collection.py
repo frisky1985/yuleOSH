@@ -6,6 +6,7 @@ collection methods (requirements, reviews, CI results, SIL reports) for
 ``EvidenceCollector``.
 """
 
+import hashlib
 import json
 import logging
 import os
@@ -297,42 +298,55 @@ class DataCollectionMixin:
               f"{renamed} renamed → {len(kept)} requirements in index")
 
     def collect_reviews(self):
-        """Collect review records from .osh/reviews/.
+        """Collect review records from every review artifact location.
 
-        Scans both subdirectory-based review-session.json files (e.g.
-        code-review/review-session.json) and flat JSON files in
-        latest/ directory (e.g. latest/code-review.json).
-        Deduplicates by (commit_sha, review_type) pair.
+        评审产物实际落在 ``.osh/reviews/<task>/review-session.json``（见
+        ``review.run.ReviewSession.save``）与 ``.osh/sessions/*/code-review.json``；
+        ``.osh/evidence/reviews/`` 只是报告归档副本。此前只扫归档区，导致
+        从未真正收集到评审记录（review-log-summary.md 恒为 0 字节）。
+
+        去重：有 (commit_sha, review_type) 的按该键去重；没有键的按内容
+        哈希去重，避免源文件与归档副本被重复计入。
         """
-        rev_dir = Path(self.project_dir) / ".osh" / "evidence" / "reviews"
-        if not rev_dir.exists():
+        project = Path(self.project_dir)
+        candidates: list[Path] = []
+        for root, pattern in (
+            (project / ".osh" / "reviews", "**/*.json"),
+            (project / ".osh" / "sessions", "*/code-review.json"),
+            (project / ".osh" / "evidence" / "reviews", "**/*.json"),
+        ):
+            if root.exists():
+                candidates.extend(sorted(root.glob(pattern)))
+
+        if not candidates:
             print("  ⏭️  No review records found")
             return
 
         seen_keys: set[tuple[str, str]] = set()
-        for task_dir in rev_dir.iterdir():
-            json_files: list[Path] = []
-            if task_dir.is_dir():
-                # Collect all .json files in the subdirectory
-                for f in sorted(task_dir.glob("*.json")):
-                    json_files.append(f)
-            elif task_dir.suffix == ".json":
-                # Flat JSON files at the reviews/ root level
-                json_files.append(task_dir)
+        seen_digests: set[str] = set()
+        for f in candidates:
+            try:
+                with open(f) as fh:
+                    data = json.load(fh)
+            except (json.JSONDecodeError, OSError) as e:
+                print(f"    ⚠️  Could not read review file {f}: {e}")
+                continue
+            if not isinstance(data, dict):
+                continue
 
-            for f in json_files:
-                try:
-                    with open(f) as fh:
-                        data = json.load(fh)
-                    key = (data.get("commit_sha", ""), data.get("review_type", ""))
-                    if key == ("", ""):
-                        # No dedup key — always include
-                        self.reviews.append(data)
-                    elif key not in seen_keys:
-                        seen_keys.add(key)
-                        self.reviews.append(data)
-                except (json.JSONDecodeError, OSError) as e:
-                    print(f"    ⚠️  Could not read review file {f}: {e}")
+            key = (data.get("commit_sha", ""), data.get("review_type", ""))
+            if key == ("", ""):
+                # No dedup key — dedupe identical content (source vs archive copy)
+                digest = hashlib.sha256(
+                    json.dumps(data, sort_keys=True, ensure_ascii=False).encode()
+                ).hexdigest()
+                if digest in seen_digests:
+                    continue
+                seen_digests.add(digest)
+                self.reviews.append(data)
+            elif key not in seen_keys:
+                seen_keys.add(key)
+                self.reviews.append(data)
 
         print(f"  📋 Collected {len(self.reviews)} review session(s)")
 

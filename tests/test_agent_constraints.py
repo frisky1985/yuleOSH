@@ -212,6 +212,7 @@ class TestLLMContextInjection:
 
     def test_call_llm_no_constraints(self):
         """_call_llm works normally when no constraints are set."""
+        from yuleosh.pipeline.knowledge_injection import PipelineKnowledgeConfig
         from yuleosh.pipeline.stages.llm import _call_llm
         from yuleosh.pipeline.session import PipelineSession
 
@@ -225,6 +226,14 @@ class TestLLMContextInjection:
             "test-session",
             "/tmp/test.md",
             llm_client=mock_client,
+        )
+        # Isolate the agent-constraint path: auto skill/memory/RAG injection
+        # is enabled by default and would otherwise append a knowledge block.
+        session.pipeline_knowledge_config = PipelineKnowledgeConfig(
+            inject_memory=False,
+            inject_rag=False,
+            inject_skills=False,
+            inject_active=False,
         )
 
         result = _call_llm(session, "Be a code reviewer.", "Review this code.")

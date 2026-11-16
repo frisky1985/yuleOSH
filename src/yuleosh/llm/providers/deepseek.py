@@ -37,7 +37,10 @@ from yuleosh.llm.providers.base import (
     PRICING_TABLE,
     AbstractProvider,
     LLMConfig,
+    LLMFatalError,
     LLMResponse,
+    http_error_code,
+    is_fatal_http_error,
 )
 from yuleosh.llm.streaming import is_local_endpoint, stream_chat_response
 
@@ -241,6 +244,12 @@ class DeepSeekProvider(AbstractProvider):
                 TimeoutError,
                 OSError,
             ) as exc:
+                # AUD-ASPICE-001 F-03: 鉴权/额度类错误不重试，立刻冒泡。
+                if is_fatal_http_error(exc):
+                    raise LLMFatalError(
+                        f"DeepSeek provider (deepseek): non-retryable HTTP "
+                        f"{http_error_code(exc)}: {exc}"
+                    ) from exc
                 last_error = exc
                 log.warning(
                     "DeepSeek provider (deepseek): attempt %d/%d failed: %s",

@@ -18,6 +18,32 @@ from typing import Any, Callable, Dict, List, Optional
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# Fatal (non-retryable) LLM errors
+# ═══════════════════════════════════════════════════════════════════════
+
+#: 鉴权 / 额度 / 配置类 HTTP 状态：重试不可能自愈（AUD-ASPICE-001 F-03）。
+FATAL_HTTP_CODES = frozenset({400, 401, 402, 403, 404, 422})
+
+
+class LLMFatalError(RuntimeError):
+    """不可重试的 LLM 错误（鉴权失败 / 额度耗尽 / 请求非法）。
+
+    对 402（余额不足）、401（Key 无效）这类错误做指数退避重试只会把一次
+    失败放大成 N 次失败并浪费几分钟；必须立刻冒泡给编排器，让它以明确的
+    原因中断流水线。
+    """
+
+
+def http_error_code(exc: BaseException) -> int | None:
+    code = getattr(exc, "code", None)
+    return code if isinstance(code, int) else None
+
+
+def is_fatal_http_error(exc: BaseException) -> bool:
+    return http_error_code(exc) in FATAL_HTTP_CODES
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # Configuration
 # ═══════════════════════════════════════════════════════════════════════
 

@@ -289,6 +289,10 @@ def _step_claude_dev_codegen(session: PipelineSession) -> str:
         skills = cfg.get("skills") or ["autosar-coding"]
         from yuleosh.codegen.autosar import normalize_autosar_rules
         autosar_rules = normalize_autosar_rules(cfg.get("autosar_classic"))
+        # NC-11: 平台模式来自项目元数据，禁止「C 语言 → AUTOSAR 全栈」默认联想。
+        from yuleosh.project_meta import ProjectMeta
+
+        project_meta = ProjectMeta.load(project_dir)
         target_language = cfg.get("target_language")
         build_cmd = cfg.get("build_cmd")
         language_hint = cfg.get("language")
@@ -353,6 +357,7 @@ def _step_claude_dev_codegen(session: PipelineSession) -> str:
                 )
             ),
             autosar_rules=autosar_rules,
+            platform=project_meta.platform,
         )
 
         # 可追溯性硬规则: 把权威需求 ID 目录注入 prompt, 让 LLM 用链可解析的 ID
@@ -381,6 +386,7 @@ def _step_claude_dev_codegen(session: PipelineSession) -> str:
             forbidden_features=forbidden_features,
             requirement_ids=list(catalog),
             autosar_rules=autosar_rules,
+            platform=project_meta.platform,
             event_handler=getattr(session, "codegen_event_handler", None),
         )
         result = engine.generate(

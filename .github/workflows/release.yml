@@ -61,6 +61,44 @@ jobs:
         run: |
           ls -la dist/
 
+      - name: Merge macOS update metadata
+        # desktop-packages 按架构分别产出 latest-mac-{x64,arm64}.yml，
+        # electron-updater 只认单一 latest-mac.yml（内含各架构 zip 条目）。
+        run: |
+          python3 -m pip install --quiet pyyaml
+          python3 - <<'PY'
+          import glob
+          import pathlib
+
+          import yaml
+
+          paths = sorted(glob.glob('dist/latest-mac-*.yml'))
+          if not paths:
+              print('no per-arch latest-mac metadata; skip')
+              raise SystemExit(0)
+
+          docs = [yaml.safe_load(pathlib.Path(p).read_text()) for p in paths]
+          merged = dict(docs[0])
+          files, seen = [], set()
+          for doc in docs:
+              for entry in doc.get('files') or []:
+                  url = entry.get('url')
+                  if url and url not in seen:
+                      seen.add(url)
+                      files.append(entry)
+          merged['files'] = files
+          # 顶层 path/sha512 是单架构遗留字段，合并后指向哪个架构都不对，
+          # 统一移除，由 electron-updater 按 files 中的架构 zip 选择。
+          merged.pop('path', None)
+          merged.pop('sha512', None)
+
+          out = pathlib.Path('dist/latest-mac.yml')
+          out.write_text(yaml.safe_dump(merged, sort_keys=False))
+          print('merged', out, '->', [f['url'] for f in files])
+          for p in paths:
+              pathlib.Path(p).unlink()
+          PY
+
       - name: Generate release notes
         run: |
           TAG="${{ steps.tag.outputs.tag }}"

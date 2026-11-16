@@ -132,8 +132,13 @@ _LLM_SYSTEM_PROMPT = """你是一个嵌入式C代码审查专家，专注于ARM 
 如果无问题，返回空数组 []。"""
 
 
-def _llm_review_snippet(code: str, max_retries: int = 1) -> list[dict]:
+def _llm_review_snippet(code: str, max_retries: int = 1,
+                        skills: str = "") -> list[dict]:
     """Use LLM to review a code snippet for embedded C issues.
+
+    ``skills`` is the step-aware yuleOSH skill context (automotive pack) —
+    prepended to the reviewer system prompt so reviews follow the same
+    domain guidance as the rest of the pipeline.
 
     Returns a list of finding dicts with severity, line, message, suggestion.
     Falls back to empty list on failure.
@@ -141,8 +146,9 @@ def _llm_review_snippet(code: str, max_retries: int = 1) -> list[dict]:
     try:
         trimmed = code[:8000]
         client = _get_llm_client()
+        system_prompt = f"{skills}\n\n{_LLM_SYSTEM_PROMPT}" if skills else _LLM_SYSTEM_PROMPT
         resp = client.chat_completion(
-            system_prompt=_LLM_SYSTEM_PROMPT,
+            system_prompt=system_prompt,
             user_prompt=(
                 f"请审查以下嵌入式C代码。重点关注：\n"
                 f"1. volatile关键字缺失（ISR共享变量）\n"
@@ -389,6 +395,19 @@ def review_embedded_c(task_name: str, project_dir: str, changed_files: list[str]
 
     result = ReviewResult(task_name, "embedded-c-reviewer")
 
+    # Step-aware skill context (automotive pack) for the LLM review pass.
+    skill_ctx = ""
+    try:
+        from yuleosh.pipeline.knowledge_injection import assemble_skill_context
+
+        skill_ctx = assemble_skill_context(
+            step_key="internal-code-review",
+            prompt=task_name,
+            project_dir=project_dir,
+        )
+    except Exception:  # noqa: BLE001 — skill injection must never block review
+        skill_ctx = ""
+
     c_files = [f for f in changed_files if f.endswith((".c", ".h"))]
 
     if not c_files:
@@ -441,7 +460,7 @@ def review_embedded_c(task_name: str, project_dir: str, changed_files: list[str]
 
         # ── LLM-enhanced pass (for complex patterns) ──
         try:
-            llm_findings = _llm_review_snippet(content)
+            llm_findings = _llm_review_snippet(content, skills=skill_ctx)
             for fd in llm_findings:
                 sev = fd.get("severity", "info")
                 line = fd.get("line", 0)

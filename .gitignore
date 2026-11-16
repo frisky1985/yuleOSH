@@ -205,6 +205,9 @@ sketches/
 # SQLite state dumps
 phase10
 
+# 本地演示工程（yuleosh init 生成，仅用于本地查看流水线效果）
+/demo-project/
+
 # Removed from remote (2026-08-18) — kept local only, pending decision
 /artifacts/
 /demos/

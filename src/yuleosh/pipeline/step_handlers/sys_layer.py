@@ -186,6 +186,62 @@ def _record_sys_swe_trace(session: PipelineSession,
     return trace_path
 
 
+def _spec_requirements(session: PipelineSession) -> list[tuple[str, str]]:
+    """spec 中的 ``[(需求ID, 语句)]``（确定性，无 LLM）。
+
+    AUD-ASPICE-001 D-02: SYS 需求必须逐条对应 spec 需求 ID，才能做双向比对。
+    """
+    try:
+        from yuleosh.spec.ssot import extract_requirements
+
+        reqs = extract_requirements(_read_spec_text(session))
+    except Exception as exc:  # noqa: BLE001 — 解析失败按空集降级
+        log.warning("[SYS.1] spec requirement extraction failed: %s", exc)
+        return []
+    out: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for req in reqs:
+        rid = (req.id or "").strip().upper()
+        if not rid or rid in seen:
+            continue
+        seen.add(rid)
+        out.append((rid, req.statement or ""))
+    return out
+
+
+def _write_sys_spec_alignment(session: PipelineSession,
+                              sys_to_spec: dict[str, str],
+                              source: str) -> dict:
+    """双向比对 SYS↔spec 并落盘（AUD-ASPICE-001 D-02）。
+
+    * ``missing_in_sys``：spec 有、SYS 无 → **critical**（漏需求）
+    * ``missing_in_spec``：SYS 有、spec 无 → **major**（凭空造需求/ID 错）
+    ``bidirectional_ok`` 仅在两者皆空时为 True。
+    """
+    spec_ids = {rid for rid, _ in _spec_requirements(session)}
+    mapped = {v for v in sys_to_spec.values() if v}
+    missing_in_sys = sorted(spec_ids - mapped)
+    missing_in_spec = sorted(mapped - spec_ids)
+    report = {
+        "source": source,
+        "sys_requirements": len(sys_to_spec),
+        "spec_requirements": len(spec_ids),
+        "bidirectional_ok": not missing_in_sys and not missing_in_spec,
+        "missing_in_sys": missing_in_sys,
+        "missing_in_spec": missing_in_spec,
+        "sys_to_spec": dict(sys_to_spec),
+    }
+    ev_dir = _evidence_dir(session)
+    ev_dir.mkdir(parents=True, exist_ok=True)
+    out = ev_dir / "sys-spec-alignment.json"
+    out.write_text(json.dumps(report, indent=2, ensure_ascii=False),
+                   encoding="utf-8")
+    if not report["bidirectional_ok"]:
+        log.warning("[SYS.1] SYS↔spec 双向比对未通过: missing_in_sys=%s "
+                    "missing_in_spec=%s", missing_in_sys, missing_in_spec)
+    return report
+
+
 def step_sys_requirements(session: PipelineSession) -> str:
     """SYS.1 — 系统需求获取（确定性）。
 
@@ -195,11 +251,15 @@ def step_sys_requirements(session: PipelineSession) -> str:
       * 不存在 → 退化为自 spec 派生（**方向倒置**：SYS 由 SWE.1 的输入反推），
         必须在文档与 sidecar 中显式标注 ``source: spec-derived``，
         禁止静默伪装成"已开展涉众需求分析"。
+
+    D-02（2026-11-16）: spec 派生时逐条绑定 spec 需求 ID，并做双向比对 ——
+    漏需求（spec 有 SYS 无）与凭空造需求（SYS 有 spec 无）都落盘可查。
     """
     stakeholders = _parse_stakeholder_requirements(session.project_dir)
     req_lines: list[str] = []
     sys_req_ids: list[str] = []
     sys_to_stake: dict[str, str] = {}
+    sys_to_spec: dict[str, str] = {}
 
     if stakeholders:
         source = "stakeholder"
@@ -214,18 +274,51 @@ def step_sys_requirements(session: PipelineSession) -> str:
         trace_line = "- SYS-REQ → STAKE-xxx 映射见 `.osh/evidence/sys-to-swe-trace.json`。\n"
     else:
         source = "spec-derived"
-        areas = _extract_functional_areas(_read_spec_text(session))
-        for i, area in enumerate(areas, start=1):
-            rid = f"SYS-REQ-{i:03d}"
-            sys_req_ids.append(rid)
-            req_lines.append(
-                f"- **{rid}** — 系统应提供「{area}」能力（SHALL 满足该功能域需求）。"
-            )
-        source_desc = ("项目 spec —— **降级**：无涉众需求文件，SYS 需求由 spec "
+        spec_reqs = _spec_requirements(session)
+        if spec_reqs:
+            for i, (spec_id, statement) in enumerate(spec_reqs, start=1):
+                rid = f"SYS-REQ-{i:03d}"
+                sys_req_ids.append(rid)
+                sys_to_spec[rid] = spec_id
+                text = (statement or "").strip().replace("\n", " ")
+                if len(text) > 120:
+                    text = text[:117] + "..."
+                req_lines.append(
+                    f"- **{rid}** ← {spec_id} — 系统应满足「{text or spec_id}」（SHALL）。"
+                )
+            derived = f"spec 需求（{len(spec_reqs)} 条，逐条绑定 spec ID）"
+        else:
+            areas = _extract_functional_areas(_read_spec_text(session))
+            for i, area in enumerate(areas, start=1):
+                rid = f"SYS-REQ-{i:03d}"
+                sys_req_ids.append(rid)
+                req_lines.append(
+                    f"- **{rid}** — 系统应提供「{area}」能力（SHALL 满足该功能域需求）。"
+                )
+            derived = "spec 标题（未解析到需求 ID，降级为功能域派生）"
+        source_desc = (f"项目 {derived} —— **降级**：无涉众需求文件，SYS 需求由 spec "
                        "反推，V 模型方向（STAKE→SYS→SWE）在此倒置")
         trace_line = "- SYS-REQ → SWE.1 映射见 `.osh/evidence/sys-to-swe-trace.json`。\n"
 
     req_block = "\n".join(req_lines) if req_lines else "- （无派生需求）"
+
+    alignment: dict = {}
+    alignment_block = ""
+    if sys_to_spec:
+        alignment = _write_sys_spec_alignment(session, sys_to_spec, source)
+        if alignment["bidirectional_ok"]:
+            status_line = "✅ 双向比对通过（spec ↔ SYS 一一对应）"
+        else:
+            status_line = (
+                "❌ 双向比对未通过 — "
+                f"spec 有而 SYS 缺失: {alignment['missing_in_sys'] or '无'}；"
+                f"SYS 有而 spec 缺失: {alignment['missing_in_spec'] or '无'}"
+            )
+        alignment_block = (
+            "\n## SYS ↔ spec 双向比对\n\n"
+            f"{status_line}\n\n"
+            "比对明细见 `.osh/evidence/sys-spec-alignment.json`。\n"
+        )
 
     content = (
         "# 系统需求规格 (SYS.1)\n\n"
@@ -237,6 +330,7 @@ def step_sys_requirements(session: PipelineSession) -> str:
         "## 可追溯性\n\n"
         f"- 每条 SYS-REQ 的上游来源: {source_desc}。\n"
         f"{trace_line}"
+        f"{alignment_block}"
     )
     out = _write_doc(session, SYS_REQUIREMENTS, content)
     _record_sys_swe_trace(session, sys_req_ids, source=source,
@@ -388,20 +482,27 @@ def step_sys_architecture(session: PipelineSession) -> str:
     return str(out)
 
 
-def _infer_verification_method(desc: str) -> str:
+def _infer_verification_method(desc: str) -> tuple[str, bool]:
     """根据需求描述关键词推断验证方法（确定性启发式，无 LLM）。
 
     ASPICE SYS.3 要求每条需求指定验证方法（评审/分析/测试/演示）。
     此处用关键词匹配做保守推断；无法推断时回退到「测试」（最常用）。
+
+    Returns
+    -------
+    tuple[str, bool]
+        ``(方法, inferred)``。``inferred=True`` 表示这是**回退推断**而非
+        关键词命中 —— AUD-ASPICE-001 D-03 要求回退必须显式标注，评审要
+        重点核查，不能伪装成确定结论。
     """
     d = desc.lower()
     if any(k in d for k in ("评审", "审查", "文档", "记录", "标识", "命名")):
-        return "评审 (Review)"
+        return "评审 (Review)", False
     if any(k in d for k in ("分析", "仿真", "建模", "覆盖率", "可靠性")):
-        return "分析 (Analysis)"
+        return "分析 (Analysis)", False
     if any(k in d for k in ("演示", "场景", "用户", "操作", "交互", "界面")):
-        return "演示 (Demonstration)"
-    return "测试 (Test)"
+        return "演示 (Demonstration)", False
+    return "测试 (Test)", True
 
 
 def step_sys_verification(session: PipelineSession) -> str:
@@ -419,20 +520,31 @@ def step_sys_verification(session: PipelineSession) -> str:
     if parsed:
         scenario_rows: list[str] = []
         coverage_rows: list[str] = []
+        inferred_rows: list[str] = []
         for i, (rid, desc) in enumerate(parsed, start=1):
             vid = f"V-SYS-{i:03d}"
-            method = _infer_verification_method(desc)
+            method, inferred = _infer_verification_method(desc)
+            method_cell = f"{method} ⚠️ 推断" if inferred else method
             scenario_rows.append(
-                f"| {vid} | {rid} | {method} | "
+                f"| {vid} | {rid} | {method_cell} | "
                 f"验证系统满足「{desc}」需求；验收准则待系统测试计划细化 |"
             )
             coverage_rows.append(f"| {rid} | {vid} | ✅ Covered |")
+            if inferred:
+                inferred_rows.append(
+                    f"- `{vid}` ← `{rid}`：验证方法由关键词回退推断为「测试」，"
+                    "需评审确认")
+        inferred_section = (
+            "\n## 待确认的推断项\n\n"
+            + "\n".join(inferred_rows) + "\n"
+        ) if inferred_rows else ""
 
         scenarios_section = (
             "## 验证用例\n\n"
             "| 验证用例 | 覆盖需求 | 验证方法 | 验收准则框架 |\n"
             "|:---------|:---------|:---------|:-------------|\n"
             + "\n".join(scenario_rows) + "\n"
+            + inferred_section
         )
         coverage_section = (
             "## 验证覆盖矩阵\n\n"

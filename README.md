@@ -14,7 +14,7 @@
     <img src="https://img.shields.io/badge/python-3.12-ff69b4?style=flat-square" alt="Python">
     <img src="https://img.shields.io/badge/tests-12589%2B%20passing-brightgreen?style=flat-square" alt="Tests">
     <img src="https://img.shields.io/badge/coverage-90.87%25-success?style=flat-square" alt="Coverage">
-    <img src="https://img.shields.io/badge/ASPICE%20SWE.1-6-traceable-success?style=flat-square" alt="ASPICE">
+    <img src="https://img.shields.io/badge/ASPICE-47%20Process%20Areas-success?style=flat-square" alt="ASPICE">
   </p>
 
   <p>
@@ -57,7 +57,7 @@
 
 ## What is yuleOSH?
 
-**yuleOSH** is an ASPICE assistance tool for embedded development powered by AI. It converts natural language requirements into complete, CI/CD-ready firmware projects with Automotive SPICE traceability assistance.
+**yuleOSH** is an ASPICE assistance tool for embedded development powered by AI. It converts natural language requirements into complete, CI/CD-ready firmware projects with Automotive SPICE traceability assistance across all 47 process areas (SWE, SYS, HWE, MLE, SUP, MAN, ACQ, SPL, PIM, REU, VAL).
 
 **In one sentence:** yuleOSH takes a spec or user story and outputs reviewed, tested, CI-instrumented firmware with ASPICE traceability assistance — all in under 2 minutes.
 
@@ -117,7 +117,7 @@ Built-in adapters for **OpenOCD** (STM32), **JLink** (ARM Cortex-M), and **espto
 Next.js web dashboard with PostgreSQL multi-tenant storage, JWT authentication, org/project isolation, and real-time pipeline monitoring.
 
 ### 📋 Compliance
-One-click generation of traceability matrices, acceptance matrices, and compliance evidence ZIP archives — assists in preparing ASPICE SWE.1~SWE.6 audit evidence.
+One-click generation of traceability matrices, acceptance matrices, and compliance evidence ZIP archives — assists in preparing audit evidence across all 47 ASPICE process areas.
 
 ### 🛡️ Security & Auditability (安全可审计, v3.13+)
 Every state-changing operation is recorded in an **append-only, tamper-evident audit log**. Each event carries a SHA-256 hash chained to the previous event — any edit, deletion, or reordering is detected by `yuleosh audit verify`. Built for teams whose compliance story depends on being able to say: *"our toolchain's own audit trail is intact."*
@@ -156,9 +156,9 @@ Test Planning → Code Review → CI Run → Evidence Pack → Deployment
 [User Story / Spec] ──▶ [OpenSpec Engine] ──▶ [Agent Pipeline] ──▶ [Code Gen]
                               │                       │                    │
                               ▼                       ▼                    ▼
-                      SHALL/SHOULD/MAY         10-stage gate          C + Python
-                      + GIVEN/WHEN/THEN        orchestration over     Firmware
-                                                24 execution units
+                      SHALL/SHOULD/MAY         25-Gate                C + Python
+                      + GIVEN/WHEN/THEN        (G0-G24) over          Firmware
+                                                102 execution steps
                                                                          │
                               ┌──────────────────────────────────────────┘
                               ▼
@@ -197,9 +197,11 @@ Test Planning → Code Review → CI Run → Evidence Pack → Deployment
 </details>
 
 <details>
-<summary><strong>2. Agent Pipeline</strong> — 10-stage gate orchestration over 24 execution units (ASPICE V-model)</summary>
+<summary><strong>2. Agent Pipeline</strong> — 25-gate orchestration (G0-G24) over 102 execution steps (ASPICE V-model)</summary>
 
-- 10-stage gate orchestration (G1-G10) over 24 execution units: spec → SDD → DDD → code → test → review
+- 25-gate orchestration (G0-G24) over 102 deterministic execution steps: spec → SDD → DDD → code → test → review → release
+- Full ASPICE process coverage — 47 process areas: SWE.1~6, SYS.1~5, HWE.1~4, MLE.1~4, SUP.1~10, MAN.1~6, ACQ.1~4, SPL.1~2, PIM.1~3, REU.1~2, VAL.1
+- Every process area has a deterministic generation step plus a deterministic review gate (no auto-green without evidence)
 - LLM-agnostic client (OpenAI-compatible API)
 - Blocking review gates before each stage transition
 - S.U.P.E.R. startup analysis for new requirements
@@ -268,7 +270,7 @@ Test Planning → Code Review → CI Run → Evidence Pack → Deployment
 yuleOSH/
 ├── src/yuleosh/
 │   ├── spec/          OpenSpec parser, validator, differ
-│   ├── pipeline/      Agent pipeline orchestrator (24 units, 10 gates)
+│   ├── pipeline/      Agent pipeline orchestrator (102 steps, 25 gates)
 │   ├── ci/            3-layer CI/CD with dependency chaining
 │   ├── review/        multi-role review matrix + external agent dual-track + resource predictor
 │   ├── codegen/       D3 code generation + compile verify + auto-repair
@@ -472,7 +474,7 @@ Elastic License 2.0 — see [LICENSE](LICENSE) for details. Copyright (c) 2025 f
 
 ## 项目简介
 
-**yuleOSH** 是嵌入式软件合规开发自动化平台（ASPICE SWE 辅助工具），由 AI 驱动，将自然语言需求自动转化为完整、CI/CD就绪的固件工程，辅助 Automotive SPICE SWE.1~SWE.6 合规证据准备。它用 AI 辅助流水线替代了需求工程、代码生成、审查、测试规划和合规证据收集中繁琐的人工环节。
+**yuleOSH** 是嵌入式软件合规开发自动化平台（ASPICE 辅助工具），由 AI 驱动，将自然语言需求自动转化为完整、CI/CD就绪的固件工程，辅助 Automotive SPICE 全部 **47 个过程域**（SWE/SYS/HWE/MLE/SUP/MAN/ACQ/SPL/PIM/REU/VAL）的合规证据准备。它用 AI 辅助流水线替代了需求工程、代码生成、审查、测试规划和合规证据收集中繁琐的人工环节。
 
 **一句话：** yuleOSH 接收需求描述，输出经过审查、测试、CI集成的固件，并附带 ASPICE 合规辅助证据——AI 辅助完成。
 
@@ -510,7 +512,7 @@ cd my-project && yuleosh pipeline run docs/spec.md
 Next.js 管理面板 + PostgreSQL 多租户存储 + JWT 认证 + 组织/项目隔离 + 流水线实时监控。
 
 ### 📋 合规审计
-一键生成追溯矩阵、验收矩阵和合规证据 ZIP 包——辅助 ASPICE SWE.1~SWE.6 证据准备。
+一键生成追溯矩阵、验收矩阵和合规证据 ZIP 包——辅助 ASPICE 全部 47 个过程域（SWE/SYS/HWE/MLE/SUP/MAN/ACQ/SPL/PIM/REU/VAL）的证据准备。每个过程域均含「确定性生成步骤 + 确定性评审门禁」，无证据不判绿（反假绿）。
 
 ### ⚙️ D3 编码生成闭环（v3.4+）
 `generate-code` 模式直接从 spec/架构生成代码，自动编译验证（Python/C），失败自动修复循环（最多 3 轮，编译错误回喂 LLM）。

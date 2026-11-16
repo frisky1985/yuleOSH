@@ -22,6 +22,8 @@ const { pathToFileURL } = url;
 const ServerManager = require('./server-manager');
 const TrayManager = require('./tray');
 const { createLogger } = require('./logger');
+const { initAutoUpdater } = require('./updater');
+const { initCrashReporter } = require('./crash-reporter');
 
 // ─── 常量 ────────────────────────────────────────────
 
@@ -1222,6 +1224,9 @@ async function bootstrap() {
     console.warn(`[Main] Backend unavailable — keeping error page: ${err.message}`);
   }
 
+  // 3. 自动更新：仅打包版启用，失败降级为日志，不影响启动
+  initAutoUpdater({ app, logger: appLogger });
+
   // macOS: 点击 Dock 图标重新显示窗口
   app.on('activate', () => {
     if (mainWindow) {
@@ -1237,6 +1242,8 @@ async function bootstrap() {
 }
 
 if (!IS_TEST) {
+  // 崩溃转储需在应用就绪前启动；未打包运行不启用，避免污染本地目录
+  initCrashReporter({ app });
   app.whenReady().then(bootstrap);
 }
 

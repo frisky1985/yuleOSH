@@ -385,7 +385,4 @@ def main(host: str | None = None, port: int | None = None) -> None:
 
 
 if __name__ == "__main__":
-    # 延迟导入，避免 yuleosh.ui.server ↔ yuleosh.ui.http_app 循环导入
-    from yuleosh.ui.http_app import main as _http_main
-
-    _http_main()
+    main()

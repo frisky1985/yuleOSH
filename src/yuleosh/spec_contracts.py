@@ -57,6 +57,11 @@ def extract_contracts(spec_path: str) -> dict:
         "params": _extract_params(lines),
         "nvm_layout": _extract_nvm_layout(content),
         "requirements": _extract_requirement_ids(lines),
+        # AUD-ASPICE-001 NC-04: spec 明确声明了接口契约节（`### xxx.h` 或
+        # 「接口契约」），抽取结果却为 0 时必须判不通过，而不是静默 passed。
+        "declares_interfaces": bool(
+            re.search(r"^#{2,4}\s+[A-Za-z0-9_]+\.h\b", content, re.M)
+        ) or ("接口契约" in content),
     }
 
 
@@ -250,11 +255,28 @@ def validate_contracts(contracts: dict, required: dict | None = None) -> dict:
     else:
         details["interfaces"] = {"found": len(interfaces),
                                  "headers": [i["header"] for i in interfaces]}
-        if interfaces and len(interfaces) < MIN_INTERFACES:
+        # AUD-ASPICE-001 NC-04: 原先 `if interfaces and len < MIN` 让
+        # 「声明了契约但一条都没抽到」直接放行。这里改为按 spec 声明判定。
+        if contracts.get("declares_interfaces") and not interfaces:
+            missing.append(
+                "spec declares interface contracts but extraction found 0 headers"
+            )
+        elif interfaces and len(interfaces) < MIN_INTERFACES:
             missing.append(
                 f"interface contracts: {len(interfaces)} < {MIN_INTERFACES} "
                 f"({[i['header'] for i in interfaces]})"
             )
+
+    # 需求 ID 唯一性（AUD-ASPICE-001 NC-04：RUN-A 中 SWR-001 重复 3 次未报警）
+    reqs = contracts.get("requirements", [])
+    dupes = sorted({r for r in reqs if reqs.count(r) > 1})
+    details["requirements"] = {
+        "found": len(reqs),
+        "unique": len(set(reqs)),
+        "duplicates": dupes,
+    }
+    if dupes:
+        missing.append(f"duplicate requirement ids: {dupes}")
 
     # 行为护栏: 声明了 §2.5 就必须逐条存在 (无合并/省略)
     want_guardrails = required.get("guardrails", len(guardrails)) if required else len(guardrails)

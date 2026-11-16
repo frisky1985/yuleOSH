@@ -69,17 +69,22 @@ def _git_commit_short(project_dir: str) -> str:
 
 
 def _has_c_sources(project_dir: str) -> bool:
-    """项目是否含 C/C++ 源码 (排除 third_party/build/.git/.osh/venv)。
+    """项目是否含**已部署**的 C/C++ 源码。
 
     2026-08-21 B dogfood: c-coverage-gate 对 Python 项目直接跑 cmake build
     失败 → 必须与 qemu-run (无 .elf skip) / autosar (无 .c/.cpp skip) 同
     模式: 无 C 源码时记录 skipped 报告而非报错。
+
+    2026-11-16 (AUD-ASPICE-001 F-01): 排除 ``artifacts/``。codegen 暂存区里
+    的 .c 文件在部署被护栏拒绝后**并不是工程代码**，却让本函数误判"有源码"，
+    随后在无 CMakeLists.txt 的工程根跑 cmake → hard-fail 拖垮整条流水线。
     """
     root = Path(project_dir)
     if not root.is_dir():
         return False
     _SKIP_DIRS = {"third_party", "build", ".git", "__pycache__",
-                  ".osh", ".venv", "venv", "node_modules"}
+                  ".osh", ".venv", "venv", "node_modules",
+                  "artifacts", "cmake-build-coverage"}
     _C_EXTS = (".c", ".h", ".cpp", ".cc", ".cxx", ".hpp")
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
@@ -87,6 +92,16 @@ def _has_c_sources(project_dir: str) -> bool:
             if fn.endswith(_C_EXTS):
                 return True
     return False
+
+
+def _has_build_definition(project_dir: str) -> bool:
+    """工程根是否有覆盖率构建定义（CMakeLists.txt）。
+
+    覆盖率门禁只能测「按工程构建系统真实构建出来的代码」。没有构建定义时
+    无法产出覆盖率证据 —— 这时必须记 skipped（gate_passed=False），而不是
+    hard-fail 中断流水线（AUD-ASPICE-001 F-01）。
+    """
+    return (Path(project_dir) / "CMakeLists.txt").is_file()
 
 
 def coverage_gate_step(session: PipelineSession) -> str:
@@ -149,8 +164,17 @@ def coverage_gate_step(session: PipelineSession) -> str:
     # 2026-08-21 B dogfood: Python 项目无 CMakeLists.txt, cmake build 必然失败
     # → 与 qemu-run/autosar 同模式 skip, 不阻断 pipeline (Python coverage 由
     # ci/stages/test.py 的 coverage stage 单独处理)
+    # 2026-11-16 (AUD-ASPICE-001 F-01): 有源码但无构建定义时同样 skip ——
+    # 覆盖率门禁不能因为「测不了」而 hard-fail 整条流水线；同时 gate_passed
+    # 保持 False，避免把"没测"伪装成"通过"。
+    skip_reason = ""
     if not _has_c_sources(project_dir):
-        log.info("⏭️  C Coverage Gate skipped — no C/C++ sources in project")
+        skip_reason = "No deployed C/C++ sources — C coverage gate not applicable"
+    elif not _has_build_definition(project_dir):
+        skip_reason = ("No CMakeLists.txt at project root — coverage build "
+                       "definition missing; coverage evidence not produced")
+    if skip_reason:
+        log.info("⏭️  C Coverage Gate skipped — %s", skip_reason)
         results = {
             "session": session.name,
             "step": "c-coverage-gate",
@@ -159,15 +183,15 @@ def coverage_gate_step(session: PipelineSession) -> str:
             "phases": {},
             "gate_passed": False,
             "skipped": True,
-            "reason": "No C/C++ sources — C coverage gate not applicable",
+            "reason": skip_reason,
             "c_fail_under": 70,
             "line_rate": 0.0,
             "branch_rate": 0.0,
             "errors": [],
-            "warnings": ["No C/C++ sources — C coverage gate skipped"],
+            "warnings": [skip_reason],
         }
-        log.info("C Coverage Gate skipped (no C/C++ sources)")
-        print("  ⏭️  [小克] C 覆盖率门禁跳过 (项目无 C/C++ 源码)")
+        log.info("C Coverage Gate skipped (%s)", skip_reason)
+        print(f"  ⏭️  [小克] C 覆盖率门禁跳过 ({skip_reason})")
         return _write_results(session, results)
 
     results = {
@@ -215,6 +239,25 @@ def coverage_gate_step(session: PipelineSession) -> str:
             for p in results["phases"]
         )
 
+        # AUD-ASPICE-001 NC-06: ASIL 分级硬门禁（行/分支双阈值）
+        _asil = _asil_level(project_dir)
+        _min_line, _min_branch = _asil_policy(project_dir)
+        results["asil_level"] = _asil
+        results["min_line_rate"] = _min_line
+        results["min_branch_rate"] = _min_branch
+        _line = float(results.get("line_rate") or 0.0)
+        _branch = float(results.get("branch_rate") or 0.0)
+        if _line > 0 or _branch > 0:
+            if _line < _min_line or _branch < _min_branch:
+                results["errors"].append(
+                    f"ASIL {_asil} coverage below threshold: "
+                    f"line {_line}%/{_min_line}%, branch {_branch}%/{_min_branch}%")
+                all_ok = False
+        elif _asil != "QM":
+            results["errors"].append(
+                f"ASIL {_asil} requires coverage evidence, but none was produced")
+            all_ok = False
+
         results["gate_passed"] = all_ok
 
         if not all_ok:
@@ -253,8 +296,20 @@ def _coverage_build_stale(project_dir: Path, coverage_build_dir: Path) -> bool:
             continue
     if newest_obj == 0.0:
         return True
-    for base in ("src", "tests"):
-        root = project_dir / base
+    # 2026-11-16 真跑复盘: CMakeLists 自身变更（例如 test-codegen 注入
+    # ENABLE_COVERAGE / add_subdirectory(tests)）也必须触发重建。否则
+    # "Existing coverage build found" 会复用未插桩的旧对象 → gcda 里
+    # 没有分支数据 → branch_rate 恒 0。
+    roots = [project_dir / "src", project_dir / "tests"]
+    for cmake_file in ("CMakeLists.txt",):
+        probe = project_dir / cmake_file
+        if probe.is_file():
+            try:
+                if probe.stat().st_mtime > newest_obj:
+                    return True
+            except OSError:
+                pass
+    for root in roots:
         if not root.exists():
             continue
         for src_file in root.rglob("*"):
@@ -490,8 +545,18 @@ def _phase_run_gcovr(project_dir: str, results: dict) -> dict:
             "--filter", "src/.*",
             "--exclude", "tests/.*",
             "--exclude", "third_party/.*",
+            # 主机仿真桩不是产品代码（HOST_SIM 下的 GPIO/时钟替身），
+            # 计入覆盖率只会稀释真实模块指标（2026-11-16 真跑: led_blink
+            # 90.9% 被 hal_host 28 行拖到 92.1%，分支 75% 被拖到 62.5%）。
+            "--exclude", ".*[_-]host\\.c",
+            "--exclude", ".*[_-]host\\.h",
             "--json", str(json_path),
             "--json-pretty",
+            # AUD-ASPICE-001 NC-06 真跑复盘（2026-11-16）: 不带 --branch 时
+            # gcovr 不输出 branch data，branch_rate 恒为 0.0 → ASIL 双阈值
+            # 永远判红（行 92.1% 却被分支 0% 拖死）。必须显式开启分支统计。
+            "--branch",
+            "--exclude-unreachable-branches",
             "--gcov-ignore-errors=source_not_found",
         ]
 
@@ -614,8 +679,10 @@ def _phase_check_gate(project_dir: str, results: dict) -> dict:
                         branch_rate = float(branch_m.group(1))
                 break
 
-        if line_rate == 0.0 and branch_rate == 0.0:
-            # 回读真实报告（禁止默认 0.0 污染证据）
+        if line_rate == 0.0 or branch_rate == 0.0:
+            # 回读真实报告（禁止默认 0.0 污染证据）。2026-11-16 真跑:
+            # stage detail 只带 line_rate → branch_rate 丢成 0.0，ASIL 双阈值
+            # 误判"分支覆盖不足"。line/branch 任一缺失都回读报告补齐。
             report_path = Path(project_dir) / ".yuleosh" / "reports" / "c-coverage.json"
             try:
                 if report_path.exists():
@@ -627,6 +694,24 @@ def _phase_check_gate(project_dir: str, results: dict) -> dict:
                     br = report_data.get("branch_rate")
                     if isinstance(br, (int, float)) and br > 0:
                         branch_rate = round(float(br), 2)
+                    elif branch_rate == 0.0:
+                        # gcovr JSON 无根级 branch_rate：从
+                        # files[].lines[].branches[] 直接汇总（与 CI 阶段
+                        # 同一算法）。缺数据时保持 0.0 —— 由门禁判红，绝不
+                        # 默认"通过"。
+                        found = hit = 0
+                        for f_entry in report_data.get("files", []) or []:
+                            if not isinstance(f_entry, dict):
+                                continue
+                            for ln in f_entry.get("lines", []) or []:
+                                if not isinstance(ln, dict):
+                                    continue
+                                for b in ln.get("branches", []) or []:
+                                    found += 1
+                                    if isinstance(b, dict) and b.get("count", 0) > 0:
+                                        hit += 1
+                        if found:
+                            branch_rate = round(100.0 * hit / found, 2)
                     log.warning(
                         "c-coverage-gate record: stage detail unparsable, "
                         "fell back to report values line_rate=%s branch_rate=%s",
@@ -653,6 +738,8 @@ def _get_fail_under(project_dir: str) -> int:
     """Read c_fail_under from project configuration.
 
     Checks .yuleosh/ci-config.yaml and .yuleosh.yaml.
+    ASIL 未显式配置覆盖率阈值时，按 ASIL 等级取默认行覆盖率阈值
+    （AUD-ASPICE-001 NC-06：SDD §4.2(3) QM 80 / ASIL-A 100 / ASIL-B+ 100）。
     """
     for config_path in [
         Path(project_dir) / ".yuleosh" / "ci-config.yaml",
@@ -676,7 +763,48 @@ def _get_fail_under(project_dir: str) -> int:
                         return int(cov["c_fail_under"])
             except Exception:
                 continue
-    return 70
+    return int(_asil_policy(project_dir)[0])
+
+
+#: ASIL → (行覆盖率下限, 分支覆盖率下限)，来源 SDD §4.2(3)
+_ASIL_POLICY: dict[str, tuple[float, float]] = {
+    "QM": (80.0, 70.0),
+    "ASIL-A": (100.0, 90.0),
+    "ASIL-B": (100.0, 100.0),
+    "ASIL-C": (100.0, 100.0),
+    "ASIL-D": (100.0, 100.0),
+}
+
+
+def _asil_level(project_dir: str) -> str:
+    """解析 ASIL 等级：环境变量 > .yuleosh.yaml > 默认 QM。"""
+    raw = os.environ.get("OSH_ASIL_LEVEL", "").strip().upper()
+    if not raw:
+        for name in (".yuleosh.yaml", ".yuleosh/ci-config.yaml"):
+            cfg = Path(project_dir) / name
+            if not cfg.is_file():
+                continue
+            try:
+                import yaml
+                data = yaml.safe_load(cfg.read_text()) or {}
+                raw = str(
+                    data.get("asil_level")
+                    or (data.get("project") or {}).get("asil_level")
+                    or (data.get("safety") or {}).get("asil_level")
+                    or ""
+                ).strip().upper()
+            except Exception:
+                continue
+            if raw:
+                break
+    raw = raw.replace("_", "-")
+    if raw in ("A", "B", "C", "D"):
+        raw = f"ASIL-{raw}"
+    return raw if raw in _ASIL_POLICY else "QM"
+
+
+def _asil_policy(project_dir: str) -> tuple[float, float]:
+    return _ASIL_POLICY[_asil_level(project_dir)]
 
 
 def _write_results(session: PipelineSession, results: dict) -> str:

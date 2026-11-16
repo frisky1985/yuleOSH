@@ -106,6 +106,35 @@ class TestDataCollectionMixin:
             c.collect_reviews()
             assert len(c.reviews) == 2  # no dedup key → both included
 
+    def test_collect_reviews_from_real_output_dir(self):
+        """评审真实产出目录 .osh/reviews/<task>/review-session.json 必须被收集。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            task_dir = os.path.join(tmp, ".osh", "reviews", "task-1")
+            os.makedirs(task_dir)
+            with open(os.path.join(task_dir, "review-session.json"), "w") as f:
+                json.dump({"task": "task-1", "decision": "passed"}, f)
+
+            c = FakeCollector(tmp)
+            c.collect_reviews()
+            assert len(c.reviews) == 1
+            assert c.reviews[0]["task"] == "task-1"
+
+    def test_collect_reviews_skips_archived_duplicate(self):
+        """归档副本与源文件内容相同时去重，避免每次生成重复计入。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            record = {"task": "task-1", "decision": "passed"}
+            src = os.path.join(tmp, ".osh", "reviews", "task-1")
+            arc = os.path.join(tmp, ".osh", "evidence", "reviews")
+            os.makedirs(src)
+            os.makedirs(arc)
+            for d in (src, arc):
+                with open(os.path.join(d, "review-session.json"), "w") as f:
+                    json.dump(record, f)
+
+            c = FakeCollector(tmp)
+            c.collect_reviews()
+            assert len(c.reviews) == 1
+
     def test_collect_ci_no_dir(self):
         """collect_ci_results: CI dir doesn't exist."""
         with tempfile.TemporaryDirectory() as tmp:

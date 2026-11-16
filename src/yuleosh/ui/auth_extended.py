@@ -872,11 +872,36 @@ def handle_refresh(refresh_token: str) -> tuple:
 
 def handle_session_info(session_token: str) -> dict:
     """GET /api/auth/session - Get current session info."""
+    from yuleosh.ui.auth import AUTH_ENABLED
+
+    store = Store()
+    if not AUTH_ENABLED:
+        # 本地免登录模式（YULEOSH_AUTH_DISABLED=1）：与
+        # _require_auth_user 一致，注入 local-dev 管理员身份，避免前端
+        # 探测 /api/auth/session 得到 401 后被踢回登录页。
+        from yuleosh.api.middleware import _resolve_local_dev_user
+
+        user_info = _resolve_local_dev_user()
+        org_id = user_info.get("org_id")
+        org = store.get_organization("demo") if org_id else None
+        projects = store.list_org_projects(org_id) if org_id else []
+        return {
+            "user_id": user_info["user_id"],
+            "org_id": org_id,
+            "email": user_info["email"],
+            "role": user_info["role"],
+            "org_name": (org or {}).get("name", "Local"),
+            "org_slug": (org or {}).get("slug", "local"),
+            "projects": [
+                {"id": p["id"], "name": p["name"], "slug": p["slug"]}
+                for p in projects
+            ],
+        }, 200
+
     user_info = get_session_user(session_token)
     if not user_info:
         return {"error": "Invalid or expired session"}, 401
 
-    store = Store()
     projects = store.list_org_projects(user_info["org_id"])
 
     return {

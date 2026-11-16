@@ -9,12 +9,18 @@ directories:
   output: release
   buildResources: assets
 
+# 打包后、生成 dmg/zip 前，为 macOS 产物补 ad-hoc 签名。
+# 无证书时若完全不签名，arm64 应用会被系统判定为「已损坏」。
+afterPack: scripts/after-pack.js
+
 # ─── 打包文件 ────────────────────────────────────────
 files:
   - main.js
   - preload.js
   - server-manager.js
   - tray.js
+  - updater.js
+  - crash-reporter.js
   - logger.js
   - package.json
   - assets/**/*
@@ -40,6 +46,11 @@ mac:
   category: public.app-category.developer-tools
   target:
     - target: dmg
+      arch:
+        - x64
+        - arm64
+    # zip 是 macOS 自动更新（electron-updater）实际下载的载体，dmg 不能自更新
+    - target: zip
       arch:
         - x64
         - arm64

@@ -5,11 +5,11 @@
 # SPDX-License-Identifier: Elastic-2.0
 
 """
-Pipeline 编排层 — 20 Gate 视图 (方案 B, 2026-08-19 老板第五轮拍板；M1 新增 SYS 系统层 G0；
-后续补齐 VAL.1 / MAN.6 / MAN.5 / 管理支撑组 ACQ.4 / REU.2 / PIM.3 / SPL.2
-及 HWE.1~4 / MLE.1~4).
+Pipeline 编排层 — 25 Gate 视图 (方案 B, 2026-08-19 老板第五轮拍板；M1 新增 SYS 系统层 G0；
+后续补齐 VAL.1 / MAN.6 / MAN.5 / 管理支撑组 ACQ.4 / REU.2 / PIM.3 / SPL.2、
+HWE.1~4 / MLE.1~4、SUP.1/8/9/10、MAN.1/2/4 及剩余 13 域).
 
-执行层保持 60 子步骤（外部 agent 独立超时 / P0 门禁 / --from-step /
+执行层保持 102 子步骤（外部 agent 独立超时 / P0 门禁 / --from-step /
 step_cache 全保留；M1 头部插入 SYS 系统层 6 步）；编排层新增 GATES 视图，
 对外稳定契约（对齐 ASPICE 过程域，含 SYS 系统层 G0），一旦约定不再变动
 （分层原则 R1-R4，见 RULES.md §12）。
@@ -104,7 +104,8 @@ GATES: list[dict] = [
     {
         "gate": "G6",
         "name": "SWE.4 单元验证 Gate",
-        "step_keys": ["verify-loop", "c-unit-test"],
+        "step_keys": ["test-case-gen", "test-codegen", "verify-loop",
+                      "c-unit-test"],
     },
     {
         "gate": "G7",
@@ -197,9 +198,69 @@ GATES: list[dict] = [
         ],
     },
     {
+        # SUP.1/8/9/10：支持过程。问题、变更、审计记录只来自真实结构化记录；
+        # 配置基线记录逐项 SHA256 与清单摘要，评审步骤重算比对（见 sup_man.py）。
+        "gate": "G19",
+        "name": "SUP 支持过程 Gate",
+        "step_keys": [
+            "sup1-quality", "sup1-review",
+            "sup8-config", "sup8-review",
+            "sup9-problem", "sup9-review",
+            "sup10-change", "sup10-review",
+        ],
+    },
+    {
+        # MAN.3：项目计划与里程碑。里程碑只来自 .osh/project/milestones.json；
+        # 已完成里程碑必须提供完成证据，否则门禁 RED（见 sup_man.py）。
+        "gate": "G20",
+        "name": "MAN 管理过程 Gate",
+        "step_keys": [
+            "man1-charter", "man1-review",
+            "man2-requirements", "man2-review",
+            "man3-project", "man3-review",
+            "man4-quality", "man4-review",
+        ],
+    },
+    {
+        # ACQ.1~3 / SPL.1：采购与供方过程。记录只来自显式扫描源；
+        # 终态必须带决策/签署/评标证据，否则门禁 RED（见 remaining_processes.py）。
+        "gate": "G21",
+        "name": "ACQ/SPL 采购与供应 Gate",
+        "step_keys": [
+            "acq1-preparation", "acq1-review",
+            "acq2-selection", "acq2-review",
+            "acq3-contract", "acq3-review",
+            "spl1-tendering", "spl1-review",
+        ],
+    },
+    {
+        # SUP.2~7：验证/确认/联合评审/审计/产品评价/文档管理。
+        # 扫描不到记录时如实记录「无条目」，终态必须带证据。
+        "gate": "G22",
+        "name": "SUP 扩展支持过程 Gate",
+        "step_keys": [
+            "sup2-verification", "sup2-review",
+            "sup3-validation", "sup3-review",
+            "sup4-joint-review", "sup4-review",
+            "sup5-audit", "sup5-review",
+            "sup6-evaluation", "sup6-review",
+            "sup7-documentation", "sup7-review",
+        ],
+    },
+    {
+        # PIM.1~2 / REU.1：组织级过程建立/评估与复用资产管理。
+        "gate": "G23",
+        "name": "PIM/REU 组织过程 Gate",
+        "step_keys": [
+            "pim1-establishment", "pim1-review",
+            "pim2-assessment", "pim2-review",
+            "reu1-assets", "reu1-review",
+        ],
+    },
+    {
         # SPL.2：发布清单带 SHA256 摘要，批准状态默认「待批准」。
         # final-report 归入本 Gate，使最终报告收录发布结论。
-        "gate": "G19",
+        "gate": "G24",
         "name": "SPL.2 产品发布 Gate",
         "step_keys": ["spl2-release", "spl2-review", "final-report"],
     },
@@ -451,6 +512,49 @@ _ARTIFACT_CANDIDATES: dict[str, tuple[str, ...]] = {
     "mle3-review": ("ml-training-report.md",),
     "mle4-evaluation": ("ml-evaluation-report.md",),
     "mle4-review": ("ml-evaluation-report.md",),
+    "sup1-quality": ("qa-plan.md", "qa-record-register.yaml"),
+    "sup1-review": ("qa-plan.md",),
+    "sup8-config": ("configuration-management.md", "configuration-items.yaml",
+                    "pipeline-baseline.json"),
+    "sup8-review": ("configuration-management.md",),
+    "sup9-problem": ("known-issues.md", "issue-register.yaml"),
+    "sup9-review": ("known-issues.md",),
+    "sup10-change": ("change-requests.md", "change-request-register.yaml"),
+    "sup10-review": ("change-requests.md",),
+    "man1-charter": ("project-charter.md",),
+    "man1-review": ("project-charter.md",),
+    "man2-requirements": ("requirements-baseline.md", "requirements-change-log.yaml"),
+    "man2-review": ("requirements-baseline.md",),
+    "man3-project": ("project-plan.md",),
+    "man3-review": ("project-plan.md",),
+    "man4-quality": ("quality-management.md", "quality-register.yaml"),
+    "man4-review": ("quality-management.md",),
+    "acq1-preparation": ("acquisition-plan.md", "acquisition-requirements.yaml"),
+    "acq1-review": ("acquisition-plan.md",),
+    "acq2-selection": ("supplier-selection.md", "supplier-selection.yaml"),
+    "acq2-review": ("supplier-selection.md",),
+    "acq3-contract": ("contract-agreement.md", "contract-register.yaml"),
+    "acq3-review": ("contract-agreement.md",),
+    "spl1-tendering": ("tender-plan.md", "tender-register.yaml"),
+    "spl1-review": ("tender-plan.md",),
+    "sup2-verification": ("verification-plan.md", "verification-register.yaml"),
+    "sup2-review": ("verification-plan.md",),
+    "sup3-validation": ("product-validation.md", "product-validation.yaml"),
+    "sup3-review": ("product-validation.md",),
+    "sup4-joint-review": ("joint-review-report.md", "joint-review-register.yaml"),
+    "sup4-review": ("joint-review-report.md",),
+    "sup5-audit": ("audit-report.md", "audit-register.yaml"),
+    "sup5-review": ("audit-report.md",),
+    "sup6-evaluation": ("product-evaluation.md", "product-evaluation.yaml"),
+    "sup6-review": ("product-evaluation.md",),
+    "sup7-documentation": ("documentation-plan.md", "document-index.yaml"),
+    "sup7-review": ("documentation-plan.md",),
+    "pim1-establishment": ("process-definition.md", "process-assets.yaml"),
+    "pim1-review": ("process-definition.md",),
+    "pim2-assessment": ("process-assessment.md", "process-assessment.yaml"),
+    "pim2-review": ("process-assessment.md",),
+    "reu1-assets": ("reuse-asset-library.md", "reuse-assets.yaml"),
+    "reu1-review": ("reuse-asset-library.md",),
     "spl2-release": ("release-plan.md", "release-manifest.yaml"),
     "spl2-review": ("release-plan.md",),
     "final-report": ("final-report.md",),
@@ -464,6 +568,31 @@ def _artifact_paths(sdir: Path | None, step_key: str) -> list[Path]:
     names = [f"{step_key}.json", *_ARTIFACT_CANDIDATES.get(step_key, ())]
     paths = [Path(sdir) / n for n in names]
     return [p for p in paths if p.exists()]
+
+
+#: 系统层 (SYS.1~SYS.5) 的产物按 ASPICE 文档规范落在 ``<project>/docs/``，
+#: 不在 session 目录内。门禁若只扫 session 目录，这 5 步的产物永远"找不到"，
+#: 被降级成 ``not-run``，G0 因此永不闭环（ASPICE 注册表 AUD-ASPICE-001 F-04）。
+_PROJECT_ARTIFACT_CANDIDATES: dict[str, tuple[str, ...]] = {
+    "sys-requirements": ("docs/system-requirements.md",),
+    "sys-architecture": ("docs/system-architecture.md",),
+    "sys-verification": ("docs/system-verification.md",),
+    "sys-integration": ("docs/system-integration.md",),
+    "sys-validation": ("docs/system-validation.md",),
+    "sys-req-review": (".osh/evidence/sys-review.json",
+                       "docs/system-requirements.md"),
+}
+
+
+def _project_artifact_paths(project_dir: Path | str | None,
+                            step_key: str) -> list[Path]:
+    """Return project-level artifact paths for ``step_key`` (existing only)."""
+    if project_dir is None:
+        return []
+    root = Path(project_dir)
+    names = _PROJECT_ARTIFACT_CANDIDATES.get(step_key, ())
+    paths = [root / n for n in names]
+    return [p for p in paths if p.is_file()]
 
 
 def _artifact_verdict(sdir: Path | None, step_key: str,
@@ -581,7 +710,8 @@ def _self_reported_success(status: str) -> bool:
 
 
 def _apply_artifact_overlay(step_statuses: dict[str, str], sdir: Path,
-                            expected_session: str = "") -> list[str]:
+                            expected_session: str = "",
+                            project_dir: Path | str | None = None) -> list[str]:
     """Let each step's own artifact correct — or refute — its recorded status.
 
     Two defects are repaired here:
@@ -623,6 +753,7 @@ def _apply_artifact_overlay(step_statuses: dict[str, str], sdir: Path,
         if (_self_reported_success(step_statuses[key])
                 and not _is_freshness_exempt(key)
                 and not _artifact_paths(sdir, key)
+                and not _project_artifact_paths(project_dir, key)
                 and not step_map.get(key)):
             log.warning(
                 "step %r claimed %r but produced no artifact — recorded as "
@@ -662,7 +793,8 @@ def write_gate_summary(session, step_statuses: dict[str, str] | None = None,
         # overridden.
         if sdir is not None:
             _expected = str(getattr(session, "name", "") or "")
-            _apply_artifact_overlay(step_statuses, Path(sdir), _expected)
+            _pdir = getattr(session, "project_dir", None)
+            _apply_artifact_overlay(step_statuses, Path(sdir), _expected, _pdir)
 
     gate_statuses = aggregate_gate_status(step_statuses)
 
@@ -693,8 +825,11 @@ def write_gate_summary(session, step_statuses: dict[str, str] | None = None,
         # ``_artifact_paths`` so the candidate table applies here too.
         artifact_hashes: dict[str, str] = {}
         if sdir is not None:
+            _pdir = getattr(session, "project_dir", None)
             for step_key in g["step_keys"]:
-                for path in _artifact_paths(Path(sdir), step_key):
+                resolved = (_artifact_paths(Path(sdir), step_key)
+                            or _project_artifact_paths(_pdir, step_key))
+                for path in resolved:
                     digest = _sha256_file(path)
                     if digest:
                         artifact_hashes[step_key] = digest
@@ -886,7 +1021,8 @@ def traceability_gate(traceability: dict | None,
 def classify_run_outcome(session_status: str, errors=None,
                          gate_summary: dict | None = None,
                          na_gates=None, config: dict | None = None,
-                         traceability: dict | None = None) -> dict:
+                         traceability: dict | None = None,
+                         signoffs: dict | None = None) -> dict:
     """Decide the run-level verdict — the single place GREEN is granted.
 
     Returns::
@@ -904,6 +1040,9 @@ def classify_run_outcome(session_status: str, errors=None,
       3. no blocking gate: every non-advisory gate is ``passed``, or is
          skipped/not-run **and** explicitly declared n/a
       4. no step errors
+      5. when ``signoffs`` is supplied, every required gate has a valid
+         human sign-off; otherwise the outcome is ``awaiting-signoff``
+         (CL2: automation never grants release on its own).
 
     Why (3) exists (2026-09-23): the orchestrator previously granted GREEN on
     (1) + (4) alone, so run 57fa80e754ed printed "GREEN — all gates passed"
@@ -936,16 +1075,33 @@ def classify_run_outcome(session_status: str, errors=None,
     if trace and trace.get("status") == "failed":
         blocking.append({"gate": TRACE_GATE_KEY, "status": "failed"})
 
+    # AUD-ASPICE-001 NC-09: 关键基线（G1 需求 / G2 架构）必须人工签批。
+    # 未签批 ≠ 红：自动化只能把证据准备好，放行结论为 awaiting-signoff。
+    signoff_blocking: list[dict] = []
+    for gate_key, info in (signoffs or {}).items():
+        if isinstance(info, dict) and info.get("signed") is True:
+            continue
+        reason = ""
+        if isinstance(info, dict):
+            reason = str(info.get("reason") or "")
+        signoff_blocking.append({
+            "gate": str(gate_key).upper(),
+            "status": "awaiting-signoff",
+            "reason": reason,
+        })
+
     def _result(outcome: str, reason: str) -> dict:
         result = {
             "outcome": outcome,
             "reason": reason,
             "worst_gate_status": worst,
-            "blocking_gates": blocking,
+            "blocking_gates": blocking + signoff_blocking,
             "declared_na": sorted(set(declared_hits)),
         }
         if trace is not None:
             result["traceability"] = trace
+        if signoffs is not None:
+            result["signoffs"] = signoffs
         return result
 
     if str(session_status) != "completed":
@@ -955,6 +1111,10 @@ def classify_run_outcome(session_status: str, errors=None,
     if blocking:
         detail = ", ".join(f"{b['gate']}={b['status']}" for b in blocking)
         return _result("unverified", f"gate evidence incomplete ({detail})")
+    if signoff_blocking:
+        detail = ", ".join(b["gate"] for b in signoff_blocking)
+        return _result("awaiting-signoff",
+                       f"human sign-off required for {detail}")
     if errors:
         return _result("unverified", f"{len(errors)} step verdict failure(s)")
     if worst != "passed" and not declared_hits:

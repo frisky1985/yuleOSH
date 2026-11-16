@@ -19,6 +19,7 @@ into a Pipeline-compatible step handler.
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime
@@ -34,6 +35,49 @@ log = logging.getLogger("pipeline.step_handlers.review_arch")
 from yuleosh.pipeline.step_handlers.audit_utils import record_step_verdict
 
 __all__ = ["step_review_arch"]
+
+#: 架构漂移的确定性检查（不依赖 LLM 判断）。
+_AUTOSAR_MARKERS = ("Rte_", "SchM", "BSW", "SWC", "arxml")
+
+
+def _mentions_hal(text: str) -> bool:
+    """是否提到 HAL / 硬件抽象层（``\\bhal\\b`` 避免命中 "shall"）。"""
+    low = text.lower()
+    return bool(re.search(r"\bhal\b", low)) or "硬件抽象" in text or "抽象层" in text
+
+
+def _deterministic_drift_findings(spec_content: str,
+                                  arch_content: str) -> list[dict]:
+    """确定性架构漂移检查（AUD-ASPICE-001 NC-05）。
+
+    只做两条保守规则，避免误报：
+    1. spec 要求 HAL 抽象 → 架构必须体现 HAL/硬件抽象层；
+    2. 架构引入 AUTOSAR 组件但 spec 未要求 → 过度设计/范围漂移。
+    """
+    if not spec_content or not arch_content:
+        return []
+    findings: list[dict] = []
+    spec_low = spec_content.lower()
+    if _mentions_hal(spec_content) and not _mentions_hal(arch_content):
+        findings.append({
+            "severity": "major",
+            "category": "Architecture/Drift",
+            "message": "spec 要求硬件抽象层 (HAL)，但架构文档未提及 HAL/硬件抽象",
+            "source": "deterministic",
+            "rule": "ARCH-DRIFT-HAL",
+        })
+    markers = [m for m in _AUTOSAR_MARKERS if m.lower() in arch_content.lower()]
+    if markers and "autosar" not in spec_low:
+        findings.append({
+            "severity": "major",
+            "category": "Architecture/Scope",
+            "message": (
+                "架构引入 AUTOSAR 组件 (" + ", ".join(markers)
+                + ")，但 spec 未要求 AUTOSAR —— 存在过度设计/范围漂移"),
+            "source": "deterministic",
+            "rule": "ARCH-DRIFT-AUTOSAR",
+        })
+    return findings
 
 
 @timed_step
@@ -108,17 +152,46 @@ def step_review_arch(session: PipelineSession) -> str:
         findings_json = [f.to_dict() for f in review_result.findings]
         static_summary = review_result.summary
 
+        # AUD-ASPICE-001 NC-05: 静态检查看不到源码时，评审员不能据此判 passed。
+        # 架构阶段本就没有源码是正常的，所以这里只把「没有任何可审证据」
+        # 视为证据缺口；同时补一组确定性漂移检查，避免 LLM 评审在
+        # 「架构过度设计 / 偏离 spec」时给 0 findings。
+        evidence_gaps: list[str] = []
+        if not architecture_content.strip():
+            evidence_gaps.append("architecture artifact missing or empty")
+        if not spec_content.strip() or "(spec file not found)" in spec_content:
+            evidence_gaps.append("spec artifact missing or unreadable")
+
+        drift_findings = _deterministic_drift_findings(spec_content, architecture_content)
+        findings_json.extend(drift_findings)
+
+        # AUD-ASPICE-001 NC-02: SSOT 拓扑闭环校验（悬空引用/孤儿需求/缺设计单元）
+        try:
+            from yuleosh.spec.ssot import build_model, validate_topology
+
+            _model = build_model(spec_content, architecture_content)
+            topology_findings = [i.as_finding()
+                                 for i in validate_topology(_model)]
+        except Exception as e:  # pragma: no cover - 防御
+            log.debug("SSOT topology check skipped: %s", e)
+            topology_findings = []
+        findings_json.extend(topology_findings)
+
         finding_breakdown = {
-            "critical": sum(1 for f in review_result.findings if f.severity == "critical"),
-            "major": sum(1 for f in review_result.findings if f.severity == "major"),
-            "minor": sum(1 for f in review_result.findings if f.severity == "minor"),
-            "info": sum(1 for f in review_result.findings if f.severity == "info"),
+            "critical": sum(1 for f in findings_json if f.get("severity") == "critical"),
+            "major": sum(1 for f in findings_json if f.get("severity") == "major"),
+            "minor": sum(1 for f in findings_json if f.get("severity") == "minor"),
+            "info": sum(1 for f in findings_json if f.get("severity") == "info"),
         }
 
         overall_status = "passed"
-        if any(f.severity in ("critical",) for f in review_result.findings):
+        if evidence_gaps:
+            # 无证据 ≠ 通过。gate 侧会把 passed=false 判为 failed。
             overall_status = "failed"
-        elif len([f for f in review_result.findings if f.severity == "major"]) > 3:
+        elif any(f.get("severity") == "critical" for f in findings_json):
+            overall_status = "failed"
+        elif drift_findings or topology_findings or finding_breakdown["major"] > 3:
+            # 确定性漂移/拓扑问题必须回灌架构重做（NC-01 返工路由）
             overall_status = "retry"
 
         report = {
@@ -127,6 +200,8 @@ def step_review_arch(session: PipelineSession) -> str:
             "step": "architecture-review",
             "timestamp": datetime.now().isoformat(),
             "status": overall_status,
+            "passed": overall_status == "passed",
+            "evidence_gaps": evidence_gaps,
             "static_findings": findings_json,
             "finding_count": len(findings_json),
             "finding_breakdown": finding_breakdown,
@@ -135,6 +210,7 @@ def step_review_arch(session: PipelineSession) -> str:
             "summary": (
                 f"Static: {static_summary} | "
                 f"LLM: {'analyzed' if llm_review and not llm_review.startswith('(') else 'skipped'}"
+                + (f" | evidence_gaps: {len(evidence_gaps)}" if evidence_gaps else "")
             ),
         }
 

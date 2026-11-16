@@ -39,8 +39,10 @@ from typing import Any, Dict, List, Optional
 from yuleosh.llm.providers.base import (
     AbstractProvider,
     LLMConfig,
+    LLMFatalError,
     LLMResponse,
     TASK_BUDGETS,
+    is_fatal_http_error,
 )
 from yuleosh.llm.providers.mock import MockProvider
 from yuleosh.llm.token_budget import TokenBudgetChecker
@@ -927,6 +929,11 @@ def _stream_legacy_chat(
             max_retries=retries,
             provider="chat_completion",
         )
+    except LLMFatalError:
+        # AUD-ASPICE-001 F-03: 4xx 不是「端点不支持 SSE」——降级非流式
+        # 只会把同一个致命错误再触发一次。直接冒泡，交给 orchestrator 终止。
+        emitter.close()
+        raise
     except RuntimeError:
         if received_any:
             emitter.close()
@@ -1104,6 +1111,13 @@ def chat_completion(
                 }
 
             except (_ue.HTTPError, _ue.URLError, _json.JSONDecodeError, RuntimeError) as e:
+                # AUD-ASPICE-001 F-03: 4xx（余额/鉴权/参数）不可重试。
+                # 旧实现在这里无条件重试 3 次（1s+2s 退避），402 要浪费 3s
+                # 并污染错误信息为 "after 3 retries"；fatal 必须立即冒泡。
+                if is_fatal_http_error(e):
+                    raise LLMFatalError(
+                        f"LLM request failed (non-retryable): {e}"
+                    ) from e
                 last_error = e
                 if attempt < retries:
                     backoff = 1.0 * (2 ** (attempt - 1))

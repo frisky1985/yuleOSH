@@ -135,11 +135,11 @@ class TestCandidateTableIsReachable:
                            [{"name": "test-qualification", "status": "completed"}])
         assert _gate(summary, "G10")["status"] == "skipped"
 
-    def test_final_report_markdown_is_read_by_g19(self, tmp_path):
+    def test_final_report_markdown_is_read_by_g24(self, tmp_path):
         """撤销修复（删除 final-report 候选）→ 实测本用例转红。
 
         ``final-report.md`` 无 ``step`` 字段可扫，候选表是唯一通路。
-        HWE/MLE 落地后 final-report 归入 G19 产品发布 Gate。
+        剩余 13 域落地后 final-report 归入 G24 产品发布 Gate。
         """
         (tmp_path / "qualification-test.json").write_text(
             json.dumps({"session": "test-sess", "step": "test-qualification",
@@ -151,7 +151,7 @@ class TestCandidateTableIsReachable:
                 json.dumps({"session": "test-sess", "step": key,
                             "status": "completed"}), encoding="utf-8")
         summary = _summary(tmp_path, _all_completed())
-        assert _gate(summary, "G19")["status"] == "skipped"
+        assert _gate(summary, "G24")["status"] == "skipped"
 
 
 # ── P0-B ────────────────────────────────────────────────────────────────
@@ -339,3 +339,51 @@ class TestNoArtifactIsNotAPass:
         """The downgrade only applies to *success* claims (fail-closed)."""
         summary = _summary(tmp_path, [{"name": "merge-gate", "status": "failed"}])
         assert _gate(summary, "G9")["status"] == "failed"
+
+
+# ── P0-D (2026-11-16, AUD-ASPICE-001 F-04) ──────────────────────────────
+#
+# 系统层 5 步 (SYS.1~SYS.5) 的产物按 ASPICE 文档规范落在 ``<project>/docs/``，
+# 门禁此前只扫 session 目录 → 5 步全部被降级为 not-run，G0 永不闭环。
+# 撤销 ``_PROJECT_ARTIFACT_CANDIDATES`` / ``project_dir`` 透传后，本类用例失败。
+
+class TestProjectLevelSystemArtifacts:
+    def test_sys_doc_in_project_dir_is_not_downgraded(self, tmp_path):
+        pdir = tmp_path / "proj"
+        (pdir / "docs").mkdir(parents=True)
+        (pdir / "docs" / "system-requirements.md").write_text(
+            "# System Requirements\n", encoding="utf-8")
+        sdir = tmp_path / "session"
+        sdir.mkdir()
+
+        statuses = {"sys-requirements": "completed"}
+        _apply_artifact_overlay(statuses, sdir, "test-sess", str(pdir))
+
+        assert statuses["sys-requirements"] == "completed"
+
+    def test_sys_step_without_any_doc_is_still_downgraded(self, tmp_path):
+        pdir = tmp_path / "proj"
+        pdir.mkdir()
+        sdir = tmp_path / "session"
+        sdir.mkdir()
+
+        statuses = {"sys-requirements": "completed"}
+        _apply_artifact_overlay(statuses, sdir, "test-sess", str(pdir))
+
+        assert statuses["sys-requirements"] == "not-run"
+
+    def test_project_doc_is_hashed_into_gate_fingerprint(self, tmp_path):
+        pdir = tmp_path / "proj"
+        (pdir / "docs").mkdir(parents=True)
+        (pdir / "docs" / "system-requirements.md").write_text(
+            "# System Requirements\n", encoding="utf-8")
+        sdir = tmp_path / "session"
+        sdir.mkdir()
+
+        out = write_gate_summary(SimpleNamespace(
+            name="test-sess", session_dir=sdir, project_dir=str(pdir),
+            steps=[{"name": "sys-requirements", "status": "completed"}]))
+        gate = _gate(json.loads(Path(out).read_text()), "G0")
+
+        assert "sys-requirements" in gate["artifact_hashes"]
+        assert len(gate["artifact_hashes"]["sys-requirements"]) == 64

@@ -29,13 +29,23 @@ from yuleosh.compliance.profile import load_profile, ProfileNotFoundError, Profi
 # 默认合规标准 profile（A1-08：gap check 改读 profile）
 _DEFAULT_PROFILE = "aspice_v3.1"
 
-# P2: 完整 V 模型评估域组合 —— 工程过程(SWE) + 系统过程(SYS) + 支持/管理(SUP/MAN)。
-# 传入 ComplianceChecker(profile_names=...) 即可单次遍历覆盖全部过程域，
-# 消除「SUP/MAN 无独立评估域」盲区。
+# P2: 完整评估域组合 —— 工程过程(SWE) + 系统过程(SYS) + 支持/管理(SUP/MAN)
+# + 确认(VAL) + 度量/风险(MAN.5/6) + 管理支撑(ACQ/REU/PIM/SPL) + 硬件/机器学习(HWE/MLE)。
+# 传入 ComplianceChecker(profile_names=...) 即可单次遍历覆盖全部过程域。
+# ``aspice_sup_man_v3.1`` 置于末尾: 其 SUP.1/8/9/10 与 MAN.3 为 4-BP 完整版,
+# 覆盖 ``aspice_support_mgmt_v3.1`` 中同名的 2-BP 旧定义（_merge_profiles 后加载者优先）。
 ASPICE_FULL_PROFILES = [
     "aspice_v3.1",
     "aspice_sys_v3.1",
     "aspice_support_mgmt_v3.1",
+    "aspice_mgmt_support_v3.1",
+    "aspice_val_v3.1",
+    "aspice_man_v3.1",
+    "aspice_hwe_mle_v3.1",
+    "aspice_sup_man_v3.1",
+    # 剩余 13 域（ACQ.1~3 / SPL.1 / SUP.2~7 / PIM.1~2 / REU.1）；
+    # 各域键与既有 profile 不冲突，合并安全。
+    "aspice_remaining_v3.1",
 ]
 
 

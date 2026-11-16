@@ -175,6 +175,8 @@ aspice:
     - SYS.1
     - SYS.2
     - SYS.3
+    - SYS.4
+    - SYS.5
     - SWE.1
     - SWE.2
     - SWE.3
@@ -189,16 +191,32 @@ aspice:
     - MLE.2
     - MLE.3
     - MLE.4
+    - SUP.2
+    - SUP.3
+    - SUP.4
+    - SUP.5
+    - SUP.6
+    - SUP.7
     - SUP.1
     - SUP.8
     - SUP.9
     - SUP.10
     - VAL.1
+    - ACQ.1
+    - ACQ.2
+    - ACQ.3
     - ACQ.4
+    - SPL.1
     - SPL.2
+    - REU.1
     - REU.2
+    - PIM.1
+    - PIM.2
     - PIM.3
+    - MAN.1
+    - MAN.2
     - MAN.3
+    - MAN.4
     - MAN.5
     - MAN.6
   source_mapping:
@@ -208,6 +226,10 @@ aspice:
       process_area: SYS.2
     - pattern: "^docs/system-architecture\\.md$"
       process_area: SYS.3
+    - pattern: "^docs/system-integration-report\\.md$"
+      process_area: SYS.4
+    - pattern: "^docs/system-validation-report\\.md$"
+      process_area: SYS.5
     - pattern: "^docs/(architecture|software-architecture)\\.md$"
       process_area: SWE.2
     - pattern: "^docs/(detailed-design|design)\\.md$"
@@ -226,6 +248,32 @@ aspice:
       process_area: MAN.5
     - pattern: "^docs/supplier-(register\\.yaml|monitoring-report\\.md)$"
       process_area: ACQ.4
+    - pattern: "^docs/acquisition-(plan\\.md|requirements\\.yaml)$"
+      process_area: ACQ.1
+    - pattern: "^docs/supplier-selection\\.(md|yaml)$"
+      process_area: ACQ.2
+    - pattern: "^docs/(contract-agreement\\.md|contract-register\\.yaml)$"
+      process_area: ACQ.3
+    - pattern: "^docs/tender-(plan\\.md|register\\.yaml)$"
+      process_area: SPL.1
+    - pattern: "^docs/(verification-plan\\.md|verification-register\\.yaml)$"
+      process_area: SUP.2
+    - pattern: "^docs/product-validation\\.(md|yaml)$"
+      process_area: SUP.3
+    - pattern: "^docs/(joint-review-report\\.md|joint-review-register\\.yaml)$"
+      process_area: SUP.4
+    - pattern: "^docs/audit-(report\\.md|register\\.yaml)$"
+      process_area: SUP.5
+    - pattern: "^docs/product-evaluation\\.(md|yaml)$"
+      process_area: SUP.6
+    - pattern: "^docs/(documentation-plan\\.md|document-index\\.yaml)$"
+      process_area: SUP.7
+    - pattern: "^docs/process-(definition\\.md|assets\\.yaml)$"
+      process_area: PIM.1
+    - pattern: "^docs/process-assessment\\.(md|yaml)$"
+      process_area: PIM.2
+    - pattern: "^docs/reuse-(asset-library\\.md|assets\\.yaml)$"
+      process_area: REU.1
     - pattern: "^docs/reuse-(register\\.yaml|report\\.md)$"
       process_area: REU.2
     - pattern: "^docs/process-improvement-(plan|report)\\.md$"
@@ -250,6 +298,32 @@ aspice:
       process_area: MLE.3
     - pattern: "^docs/ml-(evaluation-report\\.md|eval-[A-Z0-9-]+\\.yaml)$"
       process_area: MLE.4
+    - pattern: "^docs/qa-(plan\\.md|record-register\\.yaml)$"
+      process_area: SUP.1
+    - pattern: "^docs/configuration-(management\\.md|items\\.yaml)$"
+      process_area: SUP.8
+    - pattern: "^baselines/.*\\.json$"
+      process_area: SUP.8
+    - pattern: "^docs/(known-issues|issue-register)\\.(md|yaml)$"
+      process_area: SUP.9
+    - pattern: "^docs/(change-requests\\.md|change-request-register\\.yaml)$"
+      process_area: SUP.10
+    - pattern: "^docs/project-plan\\.md$"
+      process_area: MAN.3
+    - pattern: "^\\.osh/project/milestones\\.json$"
+      process_area: MAN.3
+    - pattern: "^docs/project-charter\\.md$"
+      process_area: MAN.1
+    - pattern: "^\\.osh/project/charter\\.json$"
+      process_area: MAN.1
+    - pattern: "^docs/requirements-baseline\\.md$"
+      process_area: MAN.2
+    - pattern: "^docs/requirements-change-log\\.yaml$"
+      process_area: MAN.2
+    - pattern: "^docs/quality-management\\.md$"
+      process_area: MAN.4
+    - pattern: "^docs/quality-register\\.yaml$"
+      process_area: MAN.4
   id_prefixes:
     - prefix: "METRIC"
       process_area: MAN.6
@@ -305,6 +379,48 @@ aspice:
       process_area: HWE.1
     - prefix: "MLE"
       process_area: MLE.1
+    - prefix: "QA"
+      process_area: SUP.1
+    - prefix: "CM"
+      process_area: SUP.8
+    - prefix: "ISS"
+      process_area: SUP.9
+    - prefix: "CRQ"
+      process_area: SUP.10
+    - prefix: "MS"
+      process_area: MAN.3
+    - prefix: "CHR"
+      process_area: MAN.1
+    - prefix: "RC"
+      process_area: MAN.2
+    - prefix: "QM"
+      process_area: MAN.4
+    - prefix: "ACP"
+      process_area: ACQ.1
+    - prefix: "ASL"
+      process_area: ACQ.2
+    - prefix: "CTR"
+      process_area: ACQ.3
+    - prefix: "TND"
+      process_area: SPL.1
+    - prefix: "VER"
+      process_area: SUP.2
+    - prefix: "VLDR"
+      process_area: SUP.3
+    - prefix: "JRV"
+      process_area: SUP.4
+    - prefix: "AUD"
+      process_area: SUP.5
+    - prefix: "PEV"
+      process_area: SUP.6
+    - prefix: "DOC"
+      process_area: SUP.7
+    - prefix: "PRA"
+      process_area: PIM.1
+    - prefix: "PAS"
+      process_area: PIM.2
+    - prefix: "RUA"
+      process_area: REU.1
   test_level_mapping:
     - pattern: "(^|/)(unit|ut)(/|_)|test_unit"
       process_area: SWE.4

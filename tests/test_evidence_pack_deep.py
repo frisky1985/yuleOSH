@@ -45,6 +45,49 @@ def collector(tmp_proj):
 
 
 @pytest.fixture
+def collector_with_review_artifacts(tmp_proj):
+    """Collector + 两个 review 任务目录，同一 review-session.json 文件名，
+    触发 aggregate_review_logs 的归档路径（rev_dir.exists → dest.exists 碰撞）。"""
+    from yuleosh.evidence.pack import EvidenceCollector
+
+    # 任务 1：legacy 格式
+    task1 = Path(tmp_proj) / ".osh" / "reviews" / "task-1"
+    task1.mkdir(parents=True)
+    (task1 / "review-session.json").write_text(json.dumps({
+        "task": "Task 1", "decision": "passed", "created_at": "2025-06-01",
+        "reviews": [
+            {"reviewer": "bot", "status": "passed",
+             "finding_breakdown": {"critical": 0, "major": 0, "minor": 0},
+             "summary": "ok"}
+        ],
+    }))
+    # 任务 2：flat 格式 + 同名文件 → 触发碰撞分支
+    task2 = Path(tmp_proj) / ".osh" / "reviews" / "task-2"
+    task2.mkdir(parents=True)
+    (task2 / "review-session.json").write_text(json.dumps({
+        "review_type": "lint", "status": "passed",
+        "agent": "lint-bot", "generated_at": "2025-06-02",
+        "summary": "all clean", "findings": [],
+    }))
+    # 另一个独立文件（不会碰撞）
+    (task2 / "extra-code-review.json").write_text(json.dumps({
+        "review_type": "code", "status": "passed",
+        "agent": "code-bot", "findings": [],
+    }))
+
+    c = EvidenceCollector(tmp_proj)
+    # 给 reviews 一个 legacy 记录（有 actual review data 触发表格渲染）
+    c.reviews = [
+        {"task": "Task 1", "decision": "passed", "created_at": "2025-06-01",
+         "reviews": [
+             {"reviewer": "style-bot", "status": "passed",
+              "finding_breakdown": {"critical": 0, "major": 0, "minor": 0},
+              "summary": "ok"}]},
+    ]
+    return c
+
+
+@pytest.fixture
 def collector_with_reqs(collector):
     """Collector pre-loaded with sample requirements and scenarios."""
     collector.requirements = [
@@ -609,26 +652,303 @@ class TestGenerateCodeCoverageReport:
 # aggregate_review_logs
 # ==================================================================
 
-class TestAggregateReviewLogs:
-    def test_no_reviews(self, collector, tmp_proj):
-        path = collector.aggregate_review_logs()
-        assert os.path.exists(path)
 
-    def test_with_reviews(self, collector, tmp_proj):
+@pytest.fixture
+def collector_with_review_artifacts(tmp_proj):
+    """Collector + 两个 review 任务目录，同一 review-session.json 文件名，
+    触发 aggregate_review_logs 的归档路径（rev_dir.exists → dest.exists 碰撞）。"""
+    from yuleosh.evidence.pack import EvidenceCollector
+
+    # 任务 1：legacy 格式
+    task1 = Path(tmp_proj) / ".osh" / "reviews" / "task-1"
+    task1.mkdir(parents=True)
+    (task1 / "review-session.json").write_text(json.dumps({
+        "task": "Task 1",
+        "decision": "passed",
+        "created_at": "2025-06-01",
+        "reviews": [
+            {"reviewer": "bot", "status": "passed",
+             "finding_breakdown": {"critical": 0, "major": 0, "minor": 0},
+             "summary": "ok"}
+        ],
+    }))
+    # 任务 2：flat 格式 + 同名文件 → 触发碰撞分支
+    task2 = Path(tmp_proj) / ".osh" / "reviews" / "task-2"
+    task2.mkdir(parents=True)
+    (task2 / "review-session.json").write_text(json.dumps({
+        "review_type": "lint", "status": "passed",
+        "agent": "lint-bot", "generated_at": "2025-06-02",
+        "summary": "all clean", "findings": [],
+    }))
+    # 另一个独立文件（不会碰撞）
+    (task2 / "extra-code-review.json").write_text(json.dumps({
+        "review_type": "code", "status": "passed",
+        "agent": "code-bot", "findings": [],
+    }))
+
+    c = EvidenceCollector(tmp_proj)
+    # 给 reviews 一个 legacy 记录（有 actual review data 触发表格渲染）
+    c.reviews = [
+        {"task": "Task 1", "decision": "passed", "created_at": "2025-06-01",
+         "reviews": [
+             {"reviewer": "style-bot", "status": "passed",
+              "finding_breakdown": {"critical": 0, "major": 0, "minor": 0},
+              "summary": "ok"}]},
+    ]
+    return c
+
+
+class TestAggregateReviewLogs:
+    """review-log-summary.md 必须是条目化表格，可读、可审计、机器可解析。"""
+
+    def test_empty_reviews_produces_placeholder_not_zero_bytes(self, collector, tmp_proj):
+        """空集不应产生 0 字节文件；审计视角下 0 字节 == 生成失败。"""
+        path = collector.aggregate_review_logs()
+        content = open(path, encoding="utf-8").read()
+        assert content, "placeholder 必须非空"
+        assert "# Review Log Summary" in content
+        assert "未发现评审记录" in content
+        assert "## 概览" not in content, "空集不应渲染概览表"
+
+    def test_legacy_format_renders_overview_and_agent_tables(self, collector, tmp_proj):
+        """Legacy 格式 (task/decision/reviews) → 概览表 + 代理明细表。"""
         collector.reviews = [
             {
                 "task": "Review Pipeline",
                 "decision": "pass",
                 "created_at": "2025-01-01",
                 "reviews": [
-                    {"reviewer": "bot", "status": "passed", "finding_breakdown": {"critical": 0, "major": 1, "minor": 2}, "summary": "all good"},
+                    {
+                        "reviewer": "style-bot",
+                        "status": "passed",
+                        "finding_breakdown": {"critical": 0, "major": 1, "minor": 2},
+                        "summary": "all good",
+                    },
                 ],
             }
         ]
         path = collector.aggregate_review_logs()
+        content = open(path, encoding="utf-8").read()
+
+        assert "## 概览" in content
+        assert "| 任务 / 评审 | 决策 | 代理 | Critical | Major | Minor |" in content
+        assert "| Review Pipeline | `pass` | 1 | 0 | 1 | 2 |" in content
+
+        assert "## 1. Review Pipeline" in content
+        assert "| 评审代理 | 状态 | Critical | Major | Minor | 结论 |" in content
+        assert "| style-bot | `passed` | 0 | 1 | 2 | all good |" in content
+
+    def test_flat_format_renders_findings_table_with_severity_sort(self, collector, tmp_proj):
+        """Flat 格式 (review_type/status/findings) → 逐条 finding 表，按严重度排序。"""
+        collector.reviews = [
+            {
+                "review_type": "security",
+                "status": "failed",
+                "agent": "sec-reviewer",
+                "generated_at": "2025-01-02",
+                "build_id": "build-42",
+                "summary": "2 issues found",
+                "findings": [
+                    {"severity": "minor", "file": "a.py", "line": 10, "message": "unused var"},
+                    {"severity": "critical", "file": "b.py", "line": 3, "message": "sql injection"},
+                    {"severity": "major", "file": "c.py", "line": 20, "message": "missing auth"},
+                ],
+            }
+        ]
+        path = collector.aggregate_review_logs()
+        content = open(path, encoding="utf-8").read()
+
+        assert "| security | `failed` | 1 | 1 | 1 | 1 |" in content
+        assert "## 1. 评审 · security" in content
+        assert "| `failed` |" in content
+        assert "| sec-reviewer |" in content
+
+        crit_line = "| `critical` | `b.py:3` | sql injection |"
+        major_line = "| `major` | `c.py:20` | missing auth |"
+        minor_line = "| `minor` | `a.py:10` | unused var |"
+        assert crit_line in content
+        assert major_line in content
+        assert minor_line in content
+        crit_pos = content.index(crit_line)
+        major_pos = content.index(major_line)
+        minor_pos = content.index(minor_line)
+        assert crit_pos < major_pos < minor_pos, (
+            "严重度顺序应为 critical → major → minor"
+        )
+
+    def test_findings_truncate_at_50_rows(self, collector, tmp_proj):
+        """超过 50 条 finding 只展示前 50 条，底部注明 + 指向 JSON。"""
+        findings = [
+            {"severity": "info", "file": f"f{i}.py", "line": i, "message": f"msg {i}"}
+            for i in range(60)
+        ]
+        collector.reviews = [
+            {
+                "review_type": "lint",
+                "status": "passed",
+                "agent": "lint-bot",
+                "generated_at": "2025-01-03",
+                "summary": "60 info items",
+                "findings": findings,
+            }
+        ]
+        path = collector.aggregate_review_logs()
+        content = open(path, encoding="utf-8").read()
+
+        assert "共 60 条问题" in content
+        assert "仅展示前 50 条" in content
+        assert "review-log.json" in content
+        assert "| `info` | `f49.py:49` | msg 49 |" in content
+        assert "| `info` | `f50.py:50` | msg 50 |" not in content
+
+    def test_cell_escapes_pipe_and_newline(self, collector, tmp_proj):
+        """_cell 应转义竖线、压缩换行、空值显示为 —。"""
+        review_with_escapes = {
+            "review_type": "smoke",
+            "status": "passed",
+            "agent": None,
+            "generated_at": "2025-01-04",
+            "summary": "summary | with pipe" + "\n" + "and newline",
+            "findings": [
+                {
+                    "severity": "info",
+                    "file": "x.py",
+                    "line": 1,
+                    "message": "a | b" + "\n" + "c",
+                },
+            ],
+        }
+        collector.reviews = [review_with_escapes]
+        path = collector.aggregate_review_logs()
+        content = open(path, encoding="utf-8").read()
+
+        assert "| — |" in content
+        assert "summary \\| with pipe and newline" in content
+        assert "a \\| b c" in content
+
+    # ── 补充：覆盖此前未命中的分支 ──
+
+    def test_archive_raw_review_files_from_osh_reviews_dir(self, collector_with_review_artifacts, tmp_proj):
+        """归档路径：.osh/reviews/**/*.json → evidence/reviews/
+        覆盖 rev_dir.exists() → rglob → 同名碰撞 → shutil.copy2 → copied+=1 → 日志。"""
+        collector = collector_with_review_artifacts
+        evidence_dir = Path(collector.evidence_dir)
+        raw_reviews = evidence_dir / "reviews"
+        assert not raw_reviews.exists(), "归档前 subdir 应不存在"
+
+        path = collector.aggregate_review_logs()
+
+        assert raw_reviews.is_dir(), "归档后 evidence/reviews 子目录创建"
+        # task-1 和 task-2 都有 review-session.json，名字相同 → 碰撞后 task-2 的被加前缀
+        names = sorted(p.name for p in raw_reviews.iterdir())
+        assert names == [
+            "extra-code-review.json",
+            "review-session.json",          # task-1 的原样保留
+            "task-2-review-session.json",   # task-2 的被重命名
+        ], f"归档文件列表不符：{names}"
+        # 原始 .osh/reviews/ 必须完好（是 copy 不是 move）
+        assert (Path(tmp_proj) / ".osh" / "reviews" / "task-1" / "review-session.json").exists()
+        assert (Path(tmp_proj) / ".osh" / "reviews" / "task-2" / "review-session.json").exists()
+
+    def test_sev_counts_handles_non_int_finding_values(self, collector, tmp_proj):
+        """_sev_counts 的 try/except (TypeError, ValueError) 分支。"""
+        collector.reviews = [
+            {
+                "task": "Bad Data",
+                "decision": "pass",
+                "created_at": "2025-06-01",
+                "reviews": [
+                    {
+                        "reviewer": "bot", "status": "passed",
+                        # 故意塞字符串和 None —— int() 会抛 ValueError / TypeError
+                        "finding_breakdown": {
+                            "critical": "oops",
+                            "major": None,
+                            "minor": 2,
+                        },
+                        "summary": "partial junk",
+                    }
+                ],
+            }
+        ]
+        # 不应抛异常，且坏值被当作 0 处理
+        path = collector.aggregate_review_logs()
         content = open(path).read()
-        assert "Review Pipeline" in content
-        assert "pass" in content
+        # 概览表：_sev_counts 把坏值规范化成 0
+        assert "| Bad Data | `pass` | 1 | 0 | 0 | 2 |" in content
+        # 代理明细表直接显示原始值（设计意图），不再断言 0；
+        # 本测试的核心是验证 int() 抛 ValueError / TypeError 时 except 分支被走到
+
+    def test_json_write_failure_is_swallowed(self, collector, tmp_proj):
+        """写 review-log.json 时 OSError 被吞，不中断摘要生成。"""
+        collector.reviews = [
+            {"task": "X", "decision": "pass", "created_at": "2025-06-01",
+             "reviews": []},
+        ]
+        # 源码用 builtin open(json_path, "w")，mock builtins.open 即可
+        call_count = {"n": 0}
+        real_open = open
+
+        def _boom_on_json(path_or_file, mode="r", *args, **kwargs):
+            fname = str(path_or_file)
+            if fname.endswith("review-log.json") and "w" in mode:
+                call_count["n"] += 1
+                raise OSError("disk full — simulated")
+            return real_open(path_or_file, mode, *args, **kwargs)
+
+        with mock.patch("builtins.open", side_effect=_boom_on_json):
+            path = collector.aggregate_review_logs()
+
+        # 摘要 md 应正常生成（json 写失败被吞了）
+        content = real_open(path).read()
+        assert "# Review Log Summary" in content
+        assert call_count["n"] >= 1, "OSError mock 必须被触发至少一次（实际触发 %d）" % call_count["n"]
+
+    def test_archive_copy_failure_is_skipped_without_crashing(self, collector_with_review_artifacts, tmp_proj):
+        """归档时 shutil.copy2 抛 OSError 被跳过，不中断循环（report_builder.py L433-435）。"""
+        collector = collector_with_review_artifacts
+        import shutil
+
+        real_copy2 = shutil.copy2
+        fail_once = {"n": 0}
+
+        def _fail_copy2(src, dst, *a, **kw):
+            # 让第一个文件 (task-1/review-session.json) 失败，后面的继续
+            fail_once["n"] += 1
+            if fail_once["n"] == 1:
+                raise OSError("permission denied — simulated")
+            return real_copy2(src, dst, *a, **kw)
+
+        with mock.patch.object(shutil, "copy2", side_effect=_fail_copy2):
+            path = collector.aggregate_review_logs()
+
+        # 摘要 md 仍正常生成
+        assert "# Review Log Summary" in open(path).read()
+        # 归档目录里至少应有 2 个文件（task-2 的两个复制成功；task-1 的那个被跳过）
+        raw_reviews = Path(collector.evidence_dir) / "reviews"
+        names = sorted(p.name for p in raw_reviews.iterdir())
+        assert len(names) >= 2, f"copy2 抛错后其余文件应继续归档；实际只剩 {names}"
+        # 触发计数必须为 1
+        assert fail_once["n"] >= 1
+
+    def test_collect_reviews_skips_non_dict_json(self, collector_with_review_artifacts, tmp_proj):
+        """collect_reviews 里 isinstance(data, dict) 检查 — 非 dict JSON（list 等）被跳过。
+        覆盖 collection.py L335。"""
+        from yuleosh.evidence.pack import EvidenceCollector
+
+        # 在已有的 .osh/reviews/task-2 里再塞一个 list 类型的脏 JSON
+        task2 = Path(tmp_proj) / ".osh" / "reviews" / "task-2"
+        (task2 / "bad-review.json").write_text(json.dumps(["list", "not", "dict"]))
+
+        c = EvidenceCollector(tmp_proj)
+        # 不预填 reviews，让 collect_reviews 自己扫
+        c.reviews = []
+        c.collect_reviews()
+        c.aggregate_review_logs()
+
+        # 核心断言：bad-review.json 是 list 不应报错，正常 dict 记录仍被收集
+        assert len(c.reviews) >= 2, "正常 dict JSON 应被收集；实际只有 %d 条" % len(c.reviews)
+        # （list 类型的不会出现在 c.reviews 里 —— 这就是 L335 跳过它的效果）
 
 
 # ==================================================================
@@ -803,3 +1123,20 @@ class TestMain:
             with mock.patch.object(sys, "argv", ["pack", "pack", "/tmp/spec.md"]):
                 main()
                 mgen.assert_called_once_with(spec_path="/tmp/spec.md")
+
+    def test_formats_flag_forwarded(self, tmp_proj):
+        from yuleosh.evidence.pack import main
+        with mock.patch("yuleosh.evidence.pack.generate_evidence") as mgen:
+            argv = ["pack", "pack", "--formats", "md,html,xlsx,pdf", "/tmp/spec.md"]
+            with mock.patch.object(sys, "argv", argv):
+                main()
+                mgen.assert_called_once_with(
+                    spec_path="/tmp/spec.md", formats="md,html,xlsx,pdf"
+                )
+
+    def test_formats_flag_requires_value(self, tmp_proj):
+        import pytest
+        from yuleosh.evidence.pack import main
+        with mock.patch.object(sys, "argv", ["pack", "pack", "--formats"]):
+            with pytest.raises(SystemExit):
+                main()

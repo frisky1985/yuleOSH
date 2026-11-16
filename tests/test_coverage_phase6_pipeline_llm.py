@@ -395,7 +395,8 @@ class TestKnowledgeInjectionSources:
         )
 
         assert _assemble_skills("dev", PipelineKnowledgeConfig(inject_skills=False)) == ""
-        assert _assemble_skills("dev", PipelineKnowledgeConfig()) == ""
+        assert _assemble_skills(
+            "dev", PipelineKnowledgeConfig(auto_skills=False)) == ""
 
     def test_assemble_skills_success(self):
         from yuleosh.pipeline.knowledge_injection import (
@@ -409,7 +410,7 @@ class TestKnowledgeInjectionSources:
             "yuleosh.skills.prompt.render_skills", return_value="skill block"
         ) as rs:
             out = _assemble_skills("dev", cfg)
-            rs.assert_called_once_with(["autosar-coding"])
+            rs.assert_called_once_with(["autosar-coding"], max_chars_per_skill=4000)
             assert out == f"{SKILLS_HEADER}\n\nskill block"
 
     def test_assemble_skills_empty_render_and_failure(self):

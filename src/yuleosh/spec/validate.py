@@ -36,7 +36,7 @@ ID_PATTERN = re.compile(r"^([A-Z][A-Z0-9]*(?:-REQ)?(?:-SHALL(?:\-NOT)?)?)-(\d+)(
 # Pattern for SHALL table-style IDs like KL-SHALL-01, PE-SHALL-NOT-01
 TABLE_ID_PATTERN = re.compile(r"^([A-Za-z]+)-SHALL(?:\-NOT)?-(\d+)$")
 HEADER_ID_PATTERN = re.compile(
-    r"^#{2,4}\s+((?:[A-Z][A-Z0-9]*(?:-REQ)?)-[\d.]+):?\s*(.+)$", re.IGNORECASE
+    r"^#{2,4}\s+((?:[A-Z][A-Z0-9]*(?:-REQ)?)-[\d.]+):?\s*(.*)$", re.IGNORECASE
 )
 # ── Data classes ──────────────────────────────────────────────────────────────
 
@@ -241,7 +241,7 @@ def parse_spec(filepath: str) -> SpecDocument:
     current_scenario: SpecScenario | None = None
     current_section: str | None = None  # "req", "scenario", "intro"
 
-    req_pattern = re.compile(r"^#{2,4}\s+(?:Requirement(?!s)\b|[A-Za-z]+-\d[\w.]*):?\s*(.+)$", re.IGNORECASE)
+    req_pattern = re.compile(r"^#{2,4}\s+(?:Requirement(?!s)\b|[A-Za-z]+-\d[\w.]*):?\s*(.*)$", re.IGNORECASE)
     scenario_pattern = re.compile(r"^#{2,4}\s+Scenario:\s*(.+)$", re.IGNORECASE)
     reason_pattern = re.compile(r"^#{2,5}\s+Reason\s*$", re.IGNORECASE)
     acceptance_pattern = re.compile(r"^#{2,5}\s+(?:Acceptance|验收)", re.IGNORECASE)
@@ -287,6 +287,10 @@ def parse_spec(filepath: str) -> SpecDocument:
             req_id = ""
             if header_id_match:
                 req_id = header_id_match.group(1).upper()
+            # 仅含 ID 的小节标题（### SR-001）没有标题文字 → 用 ID 作为名称，
+            # 避免 name 被解析成 ID 的最后一位数字。
+            if not name and req_id:
+                name = req_id
 
             level = _id_to_level(req_id) if req_id else ""
             parent = _id_to_parent(req_id) if req_id else ""

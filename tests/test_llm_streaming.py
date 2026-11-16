@@ -759,7 +759,9 @@ class TestChatCompletionStreaming:
                          "finish_reason": "stop"}],
             "usage": {"prompt_tokens": 2, "completion_tokens": 2, "total_tokens": 4},
         }
-        mock_urlopen = mock.MagicMock(side_effect=[_http_error(400), _json_ctx(body)])
+        # 503（可重试但最终失败）代表「端点不支持 SSE」；4xx 属致命错误，
+        # 见 test_fatal_4xx_does_not_degrade（AUD-ASPICE-001 F-03）。
+        mock_urlopen = mock.MagicMock(side_effect=[_http_error(503), _json_ctx(body)])
         with mock.patch.dict(os.environ, {"LLM_API_KEY": "sk-test"}):
             with mock.patch("urllib.request.urlopen", mock_urlopen):
                 with mock.patch("time.sleep"):
@@ -775,6 +777,18 @@ class TestChatCompletionStreaming:
         assert frames[-1]["done"] is True
         text = "".join(f["text"] for f in frames if not f["reset"] and not f["done"])
         assert text == "full-answer"
+
+    def test_fatal_4xx_does_not_degrade(self, _bus, _ctx):
+        """AUD-ASPICE-001 F-03：4xx（余额/鉴权/参数）立即冒泡，不得降级重试。"""
+        from yuleosh.llm.providers.base import LLMFatalError
+
+        mock_urlopen = mock.MagicMock(side_effect=[_http_error(402)])
+        with mock.patch.dict(os.environ, {"LLM_API_KEY": "sk-test"}):
+            with mock.patch("urllib.request.urlopen", mock_urlopen):
+                with mock.patch("time.sleep"):
+                    with pytest.raises(LLMFatalError):
+                        chat_completion("sys", "user", retries=3)
+        assert mock_urlopen.call_count == 1
 
     def test_midstream_failure_raises(self, _bus, _ctx):
         """已收到 delta 后断流 → 诚实失败，绝不把半截输出当成功。"""

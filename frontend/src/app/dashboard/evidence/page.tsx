@@ -14,6 +14,7 @@ import {
   Loader2,
   RefreshCw,
   CheckCircle2,
+  Eye,
 } from "lucide-react";
 // 导航（顶栏/左栏）由 dashboard/layout 统一渲染，页面只提供内容
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,15 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { usePersistentState } from "@/lib/sidebar-persistence";
+import { EvidencePreviewDialog } from "@/components/dashboard/evidence-preview-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface EvidenceFile {
   name: string;
@@ -39,6 +49,20 @@ interface HistoryVersion {
   size: number;
   mtime: number;
   type: string;
+}
+
+/** P1 渐进执行状态（从 GET /api/v1/evidence/status 返回）。 */
+interface IncrementalStatus {
+  stage: string;
+  status: string;             // pending | running | waiting_confirm | done | failed
+  stage_label?: string;
+  progress_pct?: number;      // 0–100，后端计算好
+  started_at?: string | null;
+  current_stage_started_at?: string | null;
+  completed_stages: string[];
+  artifacts_so_far: string[];
+  error?: string | null;
+  version: string;
 }
 
 
@@ -61,17 +85,71 @@ function fmtTime(t: number): string {
 const FILE_COLLAPSE_LIMIT = 10;
 const HISTORY_COLLAPSE_LIMIT = 10;
 
+// 下载时可选的派生格式。Markdown 是真源（始终可下载），其余格式在点击
+// 下载时才由后端按需转换（缓存于 .exports/），生成阶段不再预产全部格式。
+const DOWNLOAD_FORMATS: { id: string; label: string; hint: string }[] = [
+  { id: "md", label: "Markdown", hint: "原始报告（真源）" },
+  { id: "html", label: "HTML", hint: "网页阅读 / 浏览器打印" },
+  { id: "xlsx", label: "Excel", hint: "表格筛选与二次加工" },
+  { id: "pdf", label: "PDF", hint: "审计归档（首次转换较慢）" },
+];
+
 export default function EvidencePage() {
   const [files, setFiles] = useState<EvidenceFile[]>([]);
   const [history, setHistory] = useState<HistoryVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
+  const [previewFile, setPreviewFile] = useState<EvidenceFile | null>(null);
   // Stage-6 (2026-09-05): 展开状态持久化 — 关闭浏览器再打开仍在「展开全部」
   const [showAllFiles, setShowAllFiles] = usePersistentState<boolean>(
     "evidence", "showAllFiles", false);
   const [showAllHistory, setShowAllHistory] = usePersistentState<boolean>(
     "evidence", "showAllHistory", false);
+  // 下载交互：单文件可选格式；整包可选择随包附带的派生格式。
+  const [downloadTarget, setDownloadTarget] = useState<EvidenceFile | null>(null);
+  const [packTarget, setPackTarget] = useState<{ version?: string } | null>(null);
+  const [packFormats, setPackFormats] = useState<string[]>([]);
+
+  // P1 渐进执行模式 (2026-10-18)
+  const [incremental, setIncremental] = useState<boolean>(false);
+  const [incStatus, setIncStatus] = useState<IncrementalStatus | null>(null);
+  const [waitingConfirm, setWaitingConfirm] = useState<boolean>(false);
+  /** 渐进模式运行中（独立于 generating，让 poll 跨多个 stage 持续）。 */
+  const [incRunning, setIncRunning] = useState<boolean>(false);
+
+  /** Poll GET /api/v1/evidence/status —— 渐进模式运行时每 1s 拉一次。 */
+  const pollIncStatus = useCallback(async () => {
+    try {
+      const s = await apiFetch<IncrementalStatus>("/api/v1/evidence/status");
+      setIncStatus(s);
+      // waiting_confirm → 显示确认对话框
+      setWaitingConfirm(s?.status === "waiting_confirm");
+      // done/failed → 结束轮询
+      if (s?.status === "done" || s?.status === "failed") {
+        return false; // 停止轮询
+      }
+      return true;
+    } catch {
+      return true; // 继续轮询
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!incRunning) return;
+    let alive = true;
+    const tick = async () => {
+      const cont = await pollIncStatus();
+      if (cont && alive) {
+        setTimeout(tick, 1000);
+      } else if (!cont) {
+        setIncRunning(false);
+        setWaitingConfirm(false);
+      }
+    };
+    tick();
+    return () => { alive = false; };
+  }, [incRunning, pollIncStatus]);
 
   // Stage-6 (2026-09-05): 生成进度可视化
   // 后端 /api/v1/evidence/generate 是同步阻塞调用（无中间进度事件），
@@ -147,11 +225,35 @@ export default function EvidencePage() {
     setGenElapsed(0);
     setGenResult(null);
     setError("");
+    setIncStatus(null);
+    setWaitingConfirm(false);
+    setIncRunning(false);
     try {
-      await apiFetch("/api/v1/evidence/generate", {
-        method: "POST",
-        body: JSON.stringify({}),
-      });
+      if (incremental) {
+        // P1 渐进模式：先重置 → 跑 wait_pipeline → 启动 poll 等待确认
+        await apiFetch("/api/v1/evidence/reset", { method: "POST" });
+        await apiFetch("/api/v1/evidence/stage", {
+          method: "POST",
+          body: JSON.stringify({ stage: "wait_pipeline" }),
+        });
+        setIncRunning(true); // 启动 poll
+      } else {
+        // 一键模式：原有路径
+        const result = await apiFetch<{
+          status?: string;
+          stderr?: string | null;
+          returncode?: number;
+        }>("/api/v1/evidence/generate", {
+          method: "POST",
+          body: JSON.stringify({ incremental: false }),
+        });
+        if (result?.status === "failed") {
+          throw new Error(
+            result.stderr?.trim() ||
+              `证据生成失败 (returncode=${result.returncode ?? "?"})`,
+          );
+        }
+      }
       const after = await load();
       setGenResult({
         added: Math.max(0, after - before),
@@ -160,15 +262,48 @@ export default function EvidencePage() {
       });
     } catch (e: any) {
       setError(e?.message || "生成证据包失败");
+      setIncRunning(false);
     } finally {
       setGenerating(false);
       setGenStartedAt(null);
+      // incRunning 在 poll 停止时自动 false，不在 finally 里清
     }
   };
 
-  const handleDownloadPack = () => {
+  /** P1: 渐进模式确认推进到下一阶段。 */
+  const handleConfirmResume = async () => {
+    try {
+      setWaitingConfirm(false);
+      // POST resume confirm=true，让后端推进当前 stage 并执行下一 stage
+      await apiFetch("/api/v1/evidence/resume", {
+        method: "POST",
+        body: JSON.stringify({ confirm: true }),
+      });
+      // poll 会持续拉取状态
+    } catch (e: any) {
+      setError(e?.message || "推进阶段失败");
+    }
+  };
+
+  /** P1: 渐进模式重置（放弃当前 session）。 */
+  const handleResetIncremental = async () => {
+    try {
+      await apiFetch("/api/v1/evidence/reset", { method: "POST" });
+      setIncStatus(null);
+      setWaitingConfirm(false);
+      setError("");
+    } catch (e: any) {
+      setError(e?.message || "重置失败");
+    }
+  };
+
+  const handleDownloadPack = (extraFormats: string[] = [], version?: string) => {
+    const params = new URLSearchParams();
+    if (version) params.set("version", version);
+    if (extraFormats.length) params.set("formats", ["md", ...extraFormats].join(","));
+    const qs = params.toString();
     const a = document.createElement("a");
-    a.href = "/api/v1/evidence/pack";
+    a.href = `/api/v1/evidence/pack${qs ? `?${qs}` : ""}`;
     a.download = "evidence-pack.zip";
     document.body.appendChild(a);
     a.click();
@@ -176,23 +311,22 @@ export default function EvidencePage() {
   };
 
   const handleDownloadVersion = (name: string) => {
-    const a = document.createElement("a");
-    a.href = `/api/v1/evidence/pack?version=${encodeURIComponent(name)}`;
-    a.download = name;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    setPackFormats([]);
+    setPackTarget({ version: name });
   };
 
-  // 单个证据文件下载：审计时只想看某一份报告（如 traceability-matrix.md），
-  // 不必下载整包再解压。走 GET /api/v1/evidence/file?name=<bare>。
-  const handleDownloadFile = (name: string) => {
+  // 单个证据文件下载：默认下 md 真源；选择其他格式时由后端按需转换
+  // （GET /api/v1/evidence/file?name=x.md&format=pdf）。
+  const handleDownloadFile = (name: string, format: string = "md") => {
+    const params = new URLSearchParams({ name });
+    if (format !== "md") params.set("format", format);
     const a = document.createElement("a");
-    a.href = `/api/v1/evidence/file?name=${encodeURIComponent(name)}`;
-    a.download = name;
+    a.href = `/api/v1/evidence/file?${params.toString()}`;
+    a.download = format === "md" ? name : `${name.replace(/\.[^.]+$/, "")}.${format}`;
     document.body.appendChild(a);
     a.click();
     a.remove();
+    setDownloadTarget(null);
   };
 
   const visibleFiles = showAllFiles ? files : files.slice(0, FILE_COLLAPSE_LIMIT);
@@ -213,7 +347,20 @@ export default function EvidencePage() {
               合规证据与报告打包（<code className="text-[#64748b]">.osh/evidence</code>）
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            {/* P1 渐进模式开关 (2026-10-18) */}
+            <label className="inline-flex items-center gap-1.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={incremental}
+                onChange={(e) => {
+                  setIncremental(e.target.checked);
+                  if (e.target.checked) void handleResetIncremental();
+                }}
+                className="h-3.5 w-3.5 rounded border-[#1e293b] bg-[#0a0e17] text-[#722ed1] focus:ring-[#722ed1]/50 focus:ring-offset-0"
+              />
+              <span className="text-xs text-[#94a3b8]">渐进模式</span>
+            </label>
             <Button
               variant="outline"
               onClick={() => void load()}
@@ -237,7 +384,7 @@ export default function EvidencePage() {
               ) : (
                 <Archive className="h-4 w-4" />
               )}
-              生成证据包
+              {incremental ? "渐进生成" : "生成证据包"}
             </Button>
           </div>
         </div>
@@ -248,9 +395,9 @@ export default function EvidencePage() {
           </div>
         )}
 
-        {/* Stage-6 (2026-09-05): 生成进度可视化 —— 运行中显示阶段 + 耗时,
-            完成后显示真实增量（新增 N 份 / 共 M 份 / 耗时 X.Xs）。 */}
-        {generating && (
+        {/* Stage-6 (2026-09-05): 生成进度可视化
+            P1 (2026-10-18): 渐进模式用后端真实状态；一键模式保留原有假进度 + 耗时推断。 */}
+        {generating && !incremental && (
           <div className="mb-4 rounded-lg border border-[#722ed1]/30 bg-[#722ed1]/5 px-4 py-3">
             <div className="flex items-center justify-between gap-3 mb-2">
               <span className="flex items-center gap-2 text-xs text-[#c4b5fd]">
@@ -266,6 +413,94 @@ export default function EvidencePage() {
                 className="h-full bg-gradient-to-r from-[#722ed1] to-[#1677ff] transition-all duration-300"
                 style={{ width: `${genPhase.pct}%` }}
               />
+            </div>
+          </div>
+        )}
+
+        {/* P1 渐进模式真实进度 (2026-10-18) */}
+        {incremental && (generating || incStatus) && (
+          <div className="mb-4 rounded-lg border border-[#722ed1]/30 bg-[#722ed1]/5 px-4 py-3">
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <span className="flex items-center gap-2 text-xs text-[#c4b5fd]">
+                {incStatus?.status === "waiting_confirm" ? (
+                  <CheckCircle2 className="h-3.5 w-3.5 text-[#95de64]" />
+                ) : incStatus?.status === "failed" ? (
+                  <span className="text-[#ff4d4f]">⚠</span>
+                ) : (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                )}
+                {incStatus?.stage_label ?? "初始化..."}
+                {incStatus?.error && (
+                  <span className="text-[10px] text-[#ff4d4f]">— {incStatus.error}</span>
+                )}
+              </span>
+              <span className="font-mono text-xs text-[#94a3b8] tabular-nums">
+                {incStatus?.progress_pct ?? 0}%
+              </span>
+            </div>
+            <div className="h-1.5 rounded-full bg-[#0a0e17] overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-[#722ed1] to-[#1677ff] transition-all duration-500"
+                style={{ width: `${incStatus?.progress_pct ?? 0}%` }}
+              />
+            </div>
+            {/* 阶段步骤指示器 */}
+            {incStatus && (
+              <div className="mt-2 flex items-center gap-1">
+                {["wait_pipeline", "collect", "reports", "pack"].map((stg) => {
+                  const done = incStatus.completed_stages?.includes(stg);
+                  const current = incStatus.stage === stg && incStatus.status !== "done";
+                  return (
+                    <span
+                      key={stg}
+                      className={`flex-1 h-1 rounded-full transition-all ${
+                        done
+                          ? "bg-[#95de64]"
+                          : current
+                          ? "bg-[#722ed1]"
+                          : "bg-[#1e293b]"
+                      }`}
+                      title={stg}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* P1 渐进模式：waiting_confirm 确认对话框 */}
+        {waitingConfirm && incStatus && (
+          <div className="mb-4 rounded-lg border border-[#faad14]/30 bg-[#faad14]/5 px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-[#faad14] text-lg">⏸</span>
+                <div>
+                  <p className="text-xs text-[#e2e8f0] font-medium">
+                    {incStatus.stage_label} 已完成，请确认后进入下一阶段
+                  </p>
+                  <p className="text-[10px] text-[#94a3b8] mt-0.5">
+                    已收集 {incStatus.artifacts_so_far?.length ?? 0} 份产物
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-1.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void handleResetIncremental()}
+                  className="border-[#ff4d4f]/40 text-[#ff7875] hover:bg-[#ff4d4f]/10 text-xs"
+                >
+                  重置
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => void handleConfirmResume()}
+                  className="bg-[#722ed1] hover:bg-[#722ed1]/80 text-white text-xs"
+                >
+                  继续 →
+                </Button>
+              </div>
             </div>
           </div>
         )}
@@ -342,14 +577,30 @@ export default function EvidencePage() {
                         <td className="px-3 py-2.5 text-[#94a3b8]">{fmtSize(f.size)}</td>
                         <td className="px-3 py-2.5 text-[#94a3b8]">{fmtTime(f.mtime)}</td>
                         <td className="px-3 py-2.5 text-right">
-                          <button
-                            onClick={() => handleDownloadFile(f.name)}
-                            title={`下载 ${f.name}`}
-                            className="inline-flex items-center gap-1.5 rounded-md border border-[#1e293b] px-2.5 py-1 text-xs text-[#e2e8f0] transition-colors hover:bg-[#1e293b]"
-                          >
-                            <Download className="h-3.5 w-3.5" />
-                            下载
-                          </button>
+                          <div className="inline-flex items-center gap-1.5 justify-end">
+                            {(f.type === "md" ||
+                              f.type === "html" ||
+                              f.type === "htm" ||
+                              f.type === "pdf" ||
+                              f.type === "txt") && (
+                              <button
+                                onClick={() => setPreviewFile(f)}
+                                title={`预览 ${f.name}`}
+                                className="inline-flex items-center gap-1.5 rounded-md border border-[#722ed1]/40 bg-[#722ed1]/10 px-2.5 py-1 text-xs text-[#c4b5fd] transition-colors hover:bg-[#722ed1]/20 hover:text-white"
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                                预览
+                              </button>
+                            )}
+                            <button
+                              onClick={() => setDownloadTarget(f)}
+                              title={`下载 ${f.name}（可选格式）`}
+                              className="inline-flex items-center gap-1.5 rounded-md border border-[#1e293b] px-2.5 py-1 text-xs text-[#e2e8f0] transition-colors hover:bg-[#1e293b]"
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                              下载
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -464,7 +715,10 @@ export default function EvidencePage() {
 
         <div className="mt-4 flex items-center gap-3">
           <Button
-            onClick={handleDownloadPack}
+            onClick={() => {
+              setPackFormats([]);
+              setPackTarget({});
+            }}
             disabled={files.length === 0}
             variant="outline"
             className="border-[#1e293b] text-[#e2e8f0] hover:bg-[#1e293b] disabled:opacity-50"
@@ -473,10 +727,123 @@ export default function EvidencePage() {
             下载完整合规包（ZIP）
           </Button>
           <span className="text-xs text-[#64748b]">
-            合规包以 ZIP 形式打包全部证据文件，可直接提交客户 / 认证机构审计
+            默认包含 Markdown 真源与机器校验文件；下载前可按需附加 HTML / Excel / PDF
           </span>
         </div>
       </div>
+
+      {/* 内嵌预览 Dialog —— Portal 渲染到 body，位置无关 */}
+      <EvidencePreviewDialog
+        open={previewFile !== null}
+        file={previewFile}
+        onOpenChange={(open) => {
+          if (!open) setPreviewFile(null);
+        }}
+      />
+
+      {/* 单文件下载：选择格式（md 真源即时下载，其余按需转换） */}
+      <Dialog
+        open={downloadTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDownloadTarget(null);
+        }}
+      >
+        <DialogContent size="sm">
+          <DialogHeader>
+            <DialogTitle>下载证据文件</DialogTitle>
+            <DialogDescription className="break-all">
+              {downloadTarget?.name} · 选择保存格式
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-2">
+            {DOWNLOAD_FORMATS.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => downloadTarget && handleDownloadFile(downloadTarget.name, opt.id)}
+                className="flex flex-col items-start gap-0.5 rounded-lg border border-[#1e293b] px-3 py-2 text-left transition-colors hover:border-[#722ed1]/50 hover:bg-[#722ed1]/10"
+              >
+                <span className="flex items-center gap-1.5 text-xs font-medium text-[#e2e8f0]">
+                  <FileText className="h-3.5 w-3.5 text-[#c4b5fd]" />
+                  {opt.label}
+                </span>
+                <span className="text-[10px] text-[#64748b]">{opt.hint}</span>
+              </button>
+            ))}
+          </div>
+          <p className="text-[10px] text-[#64748b]">
+            Markdown 为生成真源；其他格式由服务端即时转换，首次可能稍慢，之后命中缓存。
+          </p>
+        </DialogContent>
+      </Dialog>
+
+      {/* 整包下载：勾选随包附带的派生格式 */}
+      <Dialog
+        open={packTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setPackTarget(null);
+        }}
+      >
+        <DialogContent size="sm">
+          <DialogHeader>
+            <DialogTitle>下载合规包</DialogTitle>
+            <DialogDescription>
+              {packTarget?.version ? `历史版本 ${packTarget.version}` : "当前版本"} · 选择随包附带的格式
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-wrap gap-2">
+            {DOWNLOAD_FORMATS.filter((f) => f.id !== "md").map((opt) => {
+              const selected = packFormats.includes(opt.id);
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  title={opt.hint}
+                  onClick={() =>
+                    setPackFormats((prev) =>
+                      prev.includes(opt.id)
+                        ? prev.filter((f) => f !== opt.id)
+                        : [...prev, opt.id],
+                    )
+                  }
+                  className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition-colors ${
+                    selected
+                      ? "border-[#722ed1]/60 bg-[#722ed1]/15 text-[#c4b5fd]"
+                      : "border-[#1e293b] text-[#64748b] hover:bg-[#1e293b] hover:text-[#e2e8f0]"
+                  }`}
+                >
+                  {selected && <CheckCircle2 className="h-3 w-3" />}
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[10px] text-[#64748b]">
+            包内始终含 Markdown 与机器校验文件；勾选后转换产物会追加进 ZIP 并同步写入
+            manifest.json。PDF 首次转换较慢。
+          </p>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setPackTarget(null)}
+              className="border-[#1e293b] text-[#94a3b8]"
+            >
+              取消
+            </Button>
+            <Button
+              onClick={() => {
+                if (!packTarget) return;
+                handleDownloadPack(packFormats, packTarget.version);
+                setPackTarget(null);
+              }}
+              className="bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white"
+            >
+              <Download className="h-4 w-4" />
+              开始下载
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

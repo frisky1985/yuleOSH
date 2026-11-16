@@ -120,6 +120,9 @@ def configure_env(args) -> None:
     # 演示工程目录，否则架构分析会把启动脚本所在的仓库当成目标工程。
     os.environ.setdefault("OSH_HOME", workdir)
     os.environ.setdefault("OSH_SESSIONS_DIR", str(Path(workdir) / ".osh" / "sessions"))
+    if args.codegen:
+        # D3: development 步骤改为真实代码生成（而非仅输出计划）
+        os.environ["OSH_DEVELOPMENT_MODE"] = "generate-code"
 
 
 # ── 流水线执行 ───────────────────────────────────────────────────────────────
@@ -151,14 +154,18 @@ class LLMRecorder:
         return resp
 
 
-def run_core_pipeline(spec_path: Path, workdir: Path, full: bool) -> dict:
+def run_core_pipeline(spec_path: Path, workdir: Path, full: bool,
+                      steps: list[str] | None = None) -> dict:
     from yuleosh.pipeline import step_handlers
     from yuleosh.pipeline.orchestrator import run_pipeline
 
     if not full:
-        wanted = set(CORE_STEPS)
+        wanted = set(steps or CORE_STEPS)
         original = list(step_handlers.PIPELINE_STEPS)
         subset = [s for s in original if s[0] in wanted]
+        missing = wanted - {s[0] for s in subset}
+        if missing:
+            raise SystemExit(f"❌ 未知步骤：{', '.join(sorted(missing))}")
         step_handlers.PIPELINE_STEPS[:] = subset  # 原地修改，run shim 共享同一 list 对象
         print(f"🎯 子集模式：{len(subset)}/{len(original)} 步 "
               f"({', '.join(s[0] for s in subset)})\n", flush=True)
@@ -177,9 +184,11 @@ def run_core_pipeline(spec_path: Path, workdir: Path, full: bool) -> dict:
 
 # ── 产物校验 ─────────────────────────────────────────────────────────────────
 
-def verify_artifacts(session_dir: Path) -> list[dict]:
+def verify_artifacts(session_dir: Path, steps_run: set[str] | None = None) -> list[dict]:
     results = []
     for key, signals in ARTIFACT_SIGNALS.items():
+        if steps_run is not None and key not in steps_run:
+            continue
         candidates = [p for p in session_dir.rglob("*") if p.is_file() and key in p.name.lower()]
         if not candidates:
             candidates = [p for p in session_dir.rglob("*.md") if key in p.read_text(errors="ignore").lower()]
@@ -206,9 +215,14 @@ def main() -> int:
     ap.add_argument("--base-url", default=None)
     ap.add_argument("--api-key", default=None)
     ap.add_argument("--workdir", default="/tmp/yuleosh-llm-verify")
+    ap.add_argument("--spec", default=None, help="使用既有工程规格（不重建工作目录）")
+    ap.add_argument("--steps", default=None, help="逗号分隔的步骤名，覆盖默认核心链路")
+    ap.add_argument("--codegen", action="store_true", help="development 步骤真实生成代码")
     ap.add_argument("--full", action="store_true", help="跑完整 102 步（默认仅核心链路）")
     ap.add_argument("--keep", action="store_true")
     args = ap.parse_args()
+
+    steps = [s.strip() for s in args.steps.split(",") if s.strip()] if args.steps else None
 
     if args.model is None:
         args.model = "deepseek-chat" if args.provider == "deepseek" else "qwen2.5-coder:7b"
@@ -229,15 +243,21 @@ def main() -> int:
     configure_env(args)
 
     workdir = Path(args.workdir).resolve()
-    if workdir.exists():
-        shutil.rmtree(workdir)
-    (workdir / "docs").mkdir(parents=True)
-    spec = workdir / "docs" / "minimal-demo-spec.md"
-    spec.write_text(MINIMAL_SPEC, encoding="utf-8")
-    print(f"✅ 最小 spec：{spec}（{len(MINIMAL_SPEC)} chars）\n", flush=True)
+    if args.spec:
+        spec = Path(args.spec).resolve()
+        if not spec.is_file():
+            raise SystemExit(f"❌ spec 不存在：{spec}")
+        print(f"✅ 使用既有 spec：{spec}（{spec.stat().st_size} bytes）\n", flush=True)
+    else:
+        if workdir.exists():
+            shutil.rmtree(workdir)
+        (workdir / "docs").mkdir(parents=True)
+        spec = workdir / "docs" / "minimal-demo-spec.md"
+        spec.write_text(MINIMAL_SPEC, encoding="utf-8")
+        print(f"✅ 最小 spec：{spec}（{len(MINIMAL_SPEC)} chars）\n", flush=True)
 
     try:
-        out = run_core_pipeline(spec, workdir, args.full)
+        out = run_core_pipeline(spec, workdir, args.full, steps)
     except SystemExit as e:
         print(f"❌ 流水线提前退出：{e}")
         return 1
@@ -270,15 +290,29 @@ def main() -> int:
         print(f"    {s.get('status', '?'):<10} {s.get('name', ''):<18} {s.get('action', '')}")
     print()
     print("  产物验证：")
-    artifacts = verify_artifacts(session_dir)
+    steps_run = {s.get("action", "") for s in session.steps}
+    artifacts = verify_artifacts(session_dir, steps_run)
     for a in artifacts:
         if a["status"] == "MISSING":
             print(f"    ❌ {a['step']:<14} 未找到产物")
         else:
             mark = "✅" if a["status"] == "OK" else "⚠️ "
             print(f"    {mark} {a['step']:<14} {a['path']:<40} {a['chars']:>6} chars")
+
+    if args.codegen:
+        code_root = workdir / "artifacts" / "generated-code"
+        generated = sorted(code_root.rglob("*.c")) + sorted(code_root.rglob("*.h"))
+        print(f"\n  生成代码：{len(generated)} 个文件（{code_root}）")
+        for p in generated[:12]:
+            print(f"    • {p.relative_to(code_root)}  {p.stat().st_size:>6} bytes")
+        if not generated:
+            print("    ❌ 未找到生成代码")
     print()
-    ok = session.status == "completed" and all(a["status"] == "OK" for a in artifacts)
+    ok = (
+        session.status == "completed"
+        and all(a["status"] == "OK" for a in artifacts)
+        and (not args.codegen or bool(list((workdir / "artifacts" / "generated-code").rglob("*.c"))))
+    )
     print(f"  🎯 结论：{'真实 LLM 流水线跑通' if ok else '存在未通过项，见上方明细'}")
     print(f"  会话目录：{session_dir}")
     print("=" * 72 + "\n")

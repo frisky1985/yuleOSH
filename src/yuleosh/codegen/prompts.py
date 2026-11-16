@@ -145,6 +145,7 @@ def build_codegen_prompt(
     contracts_json: str = "",
     autosar_classic: Optional[bool] = None,
     autosar_rules: Optional[dict] = None,
+    platform: Optional[str] = None,
 ) -> tuple[str, str]:
     """Build ``(system_prompt, user_prompt)`` for code generation.
 
@@ -175,6 +176,21 @@ def build_codegen_prompt(
         autosar_classic = "autosar-coding" in skills and language in {
             "", "c", "c99", "c11", "c17",
         }
+
+    # NC-11: 平台模式由项目元数据决定，优先于「C 语言 → AUTOSAR」的历史默认。
+    from yuleosh.project_meta import (
+        PLATFORM_AUTOSAR_CP,
+        ProjectMeta,
+        normalize_platform,
+    )
+
+    meta = ProjectMeta(platform=normalize_platform(platform))
+    platform_rules = meta.prompt_rules()
+    if meta.platform not in ("AUTO", PLATFORM_AUTOSAR_CP):
+        autosar_classic = False
+        autosar_rules = None
+    elif meta.platform == PLATFORM_AUTOSAR_CP:
+        autosar_classic = True
 
     if autosar_rules:
         from yuleosh.codegen.autosar import build_autosar_prompt
@@ -222,6 +238,7 @@ def build_codegen_prompt(
         "or `[]` for auxiliary code — consistent with the `@req` annotation in "
         "the file content.\n"
         + autosar_layout_prompt
+        + platform_rules
     )
 
     context_parts = [

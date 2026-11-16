@@ -225,6 +225,23 @@ def step_test_case_gen(session: PipelineSession) -> str:
             encoding="utf-8",
         )
 
+        # AUD-ASPICE-001 NC-03: 通道 B 隔离自证 —— 测试产物只允许由 spec
+        # 派生；把「是否混入源码函数体」的确定性检查结果写进产物，
+        # 供评审/审计直接判断测试上下文有没有接触实现。
+        result["context_isolation"] = "spec-only"
+        try:
+            from yuleosh.pipeline.verification_independence import source_body_leak
+
+            project_dir = Path(spec_path).resolve().parent.parent
+            result["source_body_leak"] = source_body_leak(out_path, project_dir)
+        except Exception as e:  # noqa: BLE001 — 隔离自证失败不阻断，但如实记录
+            result["source_body_leak"] = []
+            result["source_body_leak_error"] = str(e)
+        out_path.write_text(
+            json.dumps(result, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
         session.artifacts["test-cases"] = str(out_path)
 
         icon = "✅" if test_count > 0 else "⚠️"

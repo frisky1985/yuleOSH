@@ -96,6 +96,9 @@ def kpi_status(
     status_entries: list[dict[str, Any]] = []
 
     # MISRA
+    # AUD-ASPICE-001 D-01: 无报告时不得回退 0 并判 PASS。缺失证据必须显式
+    # 标为 INSUFFICIENT-EVIDENCE，否则 MAN.6 会把"没测"当成"零违规"。
+    has_misra_evidence = bool(misra_latest)
     total_v = misra_latest.get("total_violations", 0)
     req_v = misra_latest.get("required", 0)
     adv_v = misra_latest.get("advisory", 0)
@@ -105,7 +108,9 @@ def kpi_status(
         "label": "MISRA 总违规",
         "value": total_v,
         "threshold": thr["misra_total_violations"],
-        "status": "PASS" if total_v <= thr["misra_total_violations"] else "FAIL",
+        "status": ("PASS" if total_v <= thr["misra_total_violations"] else "FAIL")
+        if has_misra_evidence else "INSUFFICIENT-EVIDENCE",
+        "evidence": "present" if has_misra_evidence else "missing",
         "unit": "count",
     })
     status_entries.append({
@@ -113,7 +118,9 @@ def kpi_status(
         "label": "MISRA Required 违规",
         "value": req_v,
         "threshold": thr["misra_required_violations"],
-        "status": "PASS" if req_v <= thr["misra_required_violations"] else "FAIL",
+        "status": ("PASS" if req_v <= thr["misra_required_violations"] else "FAIL")
+        if has_misra_evidence else "INSUFFICIENT-EVIDENCE",
+        "evidence": "present" if has_misra_evidence else "missing",
         "unit": "count",
     })
     status_entries.append({
@@ -121,7 +128,9 @@ def kpi_status(
         "label": "MISRA Advisory 违规",
         "value": adv_v,
         "threshold": thr["misra_advisory_violations"],
-        "status": "PASS" if adv_v <= thr["misra_advisory_violations"] else "FAIL",
+        "status": ("PASS" if adv_v <= thr["misra_advisory_violations"] else "FAIL")
+        if has_misra_evidence else "INSUFFICIENT-EVIDENCE",
+        "evidence": "present" if has_misra_evidence else "missing",
         "unit": "count",
     })
 
@@ -179,7 +188,11 @@ def kpi_status(
             "label": "构建成功率 (28d)",
             "value": br,
             "threshold": thr["build_success_rate_pct"],
-            "status": process_data.get("build_success_status", "PASS"),
+            "status": (
+                process_data.get("build_success_status")
+                or ("PASS" if br >= thr["build_success_rate_pct"] else "FAIL")
+            ),
+            "evidence": "present",
             "unit": "%",
         })
     rr = process_data.get("regression_trigger_rate")
@@ -189,7 +202,11 @@ def kpi_status(
             "label": "回归触发率 (28d)",
             "value": rr,
             "threshold": thr["regression_trigger_rate_pct"],
-            "status": process_data.get("regression_status", "PASS"),
+            "status": (
+                process_data.get("regression_status")
+                or ("PASS" if rr <= thr["regression_trigger_rate_pct"] else "FAIL")
+            ),
+            "evidence": "present",
             "unit": "%",
         })
 
@@ -206,7 +223,11 @@ def kpi_status(
             "label": "缺陷逃逸率 (90d)",
             "value": er_val,
             "threshold": thr["defect_escape_rate_pct"],
-            "status": dr_data.get("status", "PASS"),
+            "status": (
+                dr_data.get("status")
+                or ("PASS" if er_val <= thr["defect_escape_rate_pct"] else "FAIL")
+            ),
+            "evidence": "present",
             "unit": "%",
         })
 
@@ -285,14 +306,27 @@ def kpi_status(
                 "health": kg_health,
                 "confidence": kg_conf,
             },
+            # AUD-ASPICE-001 D-01: 缺失证据的指标必须显式列出
+            "insufficient_evidence": [
+                e["metric"] for e in status_entries
+                if e["status"] == "INSUFFICIENT-EVIDENCE"
+            ],
         }
         return json.dumps(result, indent=2, ensure_ascii=False, default=str, allow_nan=False)
 
     # Render as Markdown table
     pass_count = sum(1 for e in status_entries if e["status"] == "PASS")
     fail_count = sum(1 for e in status_entries if e["status"] == "FAIL")
+    insufficient = [e for e in status_entries if e["status"] == "INSUFFICIENT-EVIDENCE"]
     total_checks = len(status_entries)
-    overall = "✅ ALL PASS" if fail_count == 0 else f"⚠️  {fail_count}/{total_checks} FAILING"
+    # AUD-ASPICE-001 D-01: 有指标缺证据时整体不得显示 "ALL PASS"
+    if fail_count:
+        overall = f"⚠️  {fail_count}/{total_checks} FAILING"
+    elif insufficient:
+        overall = (f"⚠️  INSUFFICIENT EVIDENCE "
+                   f"({len(insufficient)}/{total_checks} metrics missing data)")
+    else:
+        overall = "✅ ALL PASS"
 
     rows = [
         "## KPI Dashboard",
