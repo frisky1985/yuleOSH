@@ -120,6 +120,21 @@ def _rework_suffix() -> str:
     return ("\n\n" + d) if d else ""
 
 
+def _recall_suffix() -> str:
+    """历史运行召回提示（Autonomy Phase 4）。
+
+    编排器启动时把同 spec 指纹的历史失败摘要写入 ``OSH_RECALL_HINTS``；
+    这里接到 system prompt 末尾。无历史时返回空串，零影响。
+    """
+    try:
+        from yuleosh.pipeline.autonomy.recall import directive as _recall_directive
+
+        d = _recall_directive()
+    except Exception:  # pragma: no cover - 循环导入兜底
+        return ""
+    return ("\n\n" + d) if d else ""
+
+
 def build_super_analysis_prompt(
     spec_content: str,
     spec_name: str,
@@ -305,7 +320,7 @@ def build_prd_prompt(
         f"Map each requirement to concrete user stories and acceptance criteria. "
         f"Assign priority (P0/P1/P2) to each requirement group."
     )
-    return system_prompt + _rework_suffix(), user_prompt
+    return system_prompt + _rework_suffix() + _recall_suffix(), user_prompt
 
 
 # ---------------------------------------------------------------------------
@@ -393,7 +408,7 @@ def build_architecture_prompt(
         + "\n".join(key_file_snippets[:10])
         + "\n\nWrite a comprehensive architecture document."
     )
-    return system_prompt + _rework_suffix(), user_prompt
+    return system_prompt + _rework_suffix() + _recall_suffix(), user_prompt
 
 
 # ---------------------------------------------------------------------------
@@ -518,7 +533,7 @@ def build_development_prompt(
 
     user_prompt = "\n\n---\n\n".join(context_parts)
     user_prompt += "\n\n---\n\nNow produce the development plan, task breakdown, and tech debt identification as Markdown."
-    return system_prompt + _rework_suffix(), user_prompt
+    return system_prompt + _rework_suffix() + _recall_suffix(), user_prompt
 
 
 # ---------------------------------------------------------------------------

@@ -115,6 +115,12 @@ from yuleosh.cli.commands.misc import (  # noqa: E402
     cmd_spec_cp,
     cmd_pipeline_run,
     cmd_pipeline_status,
+    cmd_autonomy_scan,
+    cmd_autonomy_ticket_add,
+    cmd_autonomy_ticket_list,
+    cmd_autonomy_ticket_accept,
+    cmd_autonomy_router,
+    cmd_autonomy_recall_query,
     cmd_review_auto,
     cmd_review_task,
     cmd_demo_uart,
@@ -257,6 +263,30 @@ def _build_parser() -> argparse.ArgumentParser:
     p_pipe_run.add_argument("spec", help="Specification file path")
     p_pipe_status = psub.add_parser("status", help="Show pipeline status")
     p_pipe_status.add_argument("name", nargs="?", help="Pipeline session name")
+
+    # autonomy — 任务协调层（工单 / Router / 历史召回）
+    p_auto = sub.add_parser("autonomy", help="Autonomy layer (tickets / router / recall)")
+    asub = p_auto.add_subparsers(dest="autonomy_sub")
+    asub.add_parser("scan", help="Scan signals and create tickets (OSH_AUTONOMY_MODE)")
+    p_auto_ticket = asub.add_parser("ticket", help="Manage autonomy tickets")
+    tsub = p_auto_ticket.add_subparsers(dest="ticket_sub")
+    p_auto_t_add = tsub.add_parser("add", help="Create a ticket manually")
+    p_auto_t_add.add_argument("--kind", default="manual", help="Ticket kind")
+    p_auto_t_add.add_argument("--spec", default=None, help="Spec path (default: project spec)")
+    p_auto_t_add.add_argument("--note", default="", help="Ticket note")
+    p_auto_t_list = tsub.add_parser("list", help="List tickets")
+    p_auto_t_list.add_argument("--status", default=None, help="Filter by status")
+    p_auto_t_accept = tsub.add_parser("accept", help="Accept a pending ticket")
+    p_auto_t_accept.add_argument("ticket_id", help="Ticket ID")
+    p_auto_router = asub.add_parser("router", help="Run accepted tickets via run_pipeline")
+    p_auto_router.add_argument("--once", action="store_true", help="Run one batch and exit")
+    p_auto_router.add_argument("--cycles", type=int, default=1, help="Number of cycles")
+    p_auto_router.add_argument("--interval", type=float, default=5.0, help="Idle poll interval (s)")
+    p_auto_recall = asub.add_parser("recall", help="Query historical runs by spec fingerprint")
+    recsub = p_auto_recall.add_subparsers(dest="recall_sub")
+    p_auto_rec_q = recsub.add_parser("query", help="Show recall hints for a spec")
+    p_auto_rec_q.add_argument("spec", nargs="?", default=None, help="Spec path")
+    p_auto_rec_q.add_argument("--json", action="store_true", help="Output JSON")
 
     # review
     p_review = sub.add_parser("review", help="Code review management")
@@ -718,6 +748,32 @@ def main():
             cmd_pipeline_run(args.spec, mock=args.mock, from_step=getattr(args, "from_step", 0))
         elif args.pipeline_sub == "status":
             cmd_pipeline_status(args.name)
+        else:
+            parser.print_help()
+            sys.exit(1)
+
+    elif args.command == "autonomy":
+        if args.autonomy_sub == "scan":
+            cmd_autonomy_scan()
+        elif args.autonomy_sub == "ticket":
+            if args.ticket_sub == "add":
+                cmd_autonomy_ticket_add(args.kind, args.spec, args.note)
+            elif args.ticket_sub == "list":
+                cmd_autonomy_ticket_list(args.status)
+            elif args.ticket_sub == "accept":
+                cmd_autonomy_ticket_accept(args.ticket_id)
+            else:
+                parser.print_help()
+                sys.exit(1)
+        elif args.autonomy_sub == "router":
+            cmd_autonomy_router(
+                once=args.once, cycles=args.cycles, interval=args.interval)
+        elif args.autonomy_sub == "recall":
+            if args.recall_sub == "query":
+                cmd_autonomy_recall_query(args.spec, as_json=args.json)
+            else:
+                parser.print_help()
+                sys.exit(1)
         else:
             parser.print_help()
             sys.exit(1)

@@ -648,6 +648,26 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
         else:
             session.diff_skip_decisions = []
 
+        # ── Autonomy Phase 4: 历史运行召回（同 spec 指纹）──
+        # 只提供避坑提示，不参与门禁判定；任何失败都不得阻断 pipeline。
+        try:
+            from yuleosh.pipeline.autonomy.recall import (
+                clear_hint as _recall_clear_hint,
+                set_hint as _recall_set_hint,
+                suggest_hint as _recall_suggest_hint,
+            )
+
+            _recall_hint = _recall_suggest_hint(project_dir, spec_path)
+            session.recall_hints = _recall_hint
+            if _recall_hint:
+                _recall_set_hint(_recall_hint)
+                print("   🧠 已注入历史运行提示（同 spec 指纹）")
+            else:
+                # 防止上一轮（同进程）残留的提示污染本轮 prompt
+                _recall_clear_hint()
+        except Exception as _recall_err:  # noqa: BLE001
+            log.debug("recall hint skipped: %s", _recall_err)
+
         # ── 验证证据每轮重跑 (2026-09-22): 清空测试/验证结果类的历史缓存 ──
         # 测试结果跨 run 复用会把上一轮的 RED/GREEN 固化成假象 —— G7 (SWE.5
         # 集成) 曾因 integration-test / misra-review 命中 09-21 缓存
@@ -906,6 +926,18 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
                 session._save()
         except Exception as _verdict_err:  # pragma: no cover - defensive  # noqa: BLE001
             log.warning("gate verdict classification failed: %s", _verdict_err)
+
+        # ── Autonomy Phase 4: 回写历史索引（供下一轮召回）──
+        try:
+            from yuleosh.pipeline.autonomy.recall import (
+                clear_hint as _recall_clear_hint,
+                record_session as _recall_record_session,
+            )
+
+            _recall_record_session(project_dir, session, spec_path)
+            _recall_clear_hint()
+        except Exception as _recall_err:  # noqa: BLE001 — 历史索引不得阻断收尾
+            log.debug("recall record skipped: %s", _recall_err)
 
         # 人类可读证据 (2026-11-11): 生成 HTML / Excel / Markdown 汇总到
         # docs/evidence/<session>/。与 .osh/sessions 下的 JSON 机器证据分层：
@@ -1576,9 +1608,23 @@ def _maybe_rework(session, registered, review_idx: int, review_key: str,
     返回是否发生过返工。
     """
     try:
-        from yuleosh.pipeline.rework import MAX_REWORK_ROUNDS, clear, plan_rework
+        from yuleosh.pipeline.rework import (
+            MAX_REWORK_ROUNDS,
+            clear,
+            plan_rework,
+            read_blocking_findings,
+        )
     except Exception:  # pragma: no cover - 防御
         return False
+    try:
+        from yuleosh.pipeline.autonomy.watchdog import (
+            artifact_digest,
+            findings_signature,
+            get_watchdog,
+        )
+        _watchdog_ok = True
+    except Exception:  # pragma: no cover - watchdog 不可用不得停用返工
+        _watchdog_ok = False
 
     sdir = Path(getattr(session, "session_dir", "") or "")
     if not str(sdir) or not sdir.is_dir():
@@ -1588,11 +1634,29 @@ def _maybe_rework(session, registered, review_idx: int, review_key: str,
     if review_entry is None:
         return False
 
+    watchdog = get_watchdog(session) if _watchdog_ok else None
     reworked = False
     while True:
         status = _artifact_status(artifact)
         if status not in ("retry", "failed", "incomplete"):
             break
+        # Watchdog: 连续相同失败签名 → 提前升级，避免无意义空转。
+        if watchdog is not None:
+            progress = watchdog.record(
+                review_key,
+                signature=findings_signature(read_blocking_findings(artifact)),
+                artifact_digest_value=artifact_digest(artifact),
+                status=status,
+            )
+            if progress.tripped:
+                msg = (f"watchdog: {review_key} 连续 {progress.streak} 次无实质进展 "
+                       f"(status={status}) — 提前升级人工介入")
+                log.warning(msg)
+                errors = getattr(session, "errors", None)
+                if isinstance(errors, list) and msg not in errors:
+                    errors.append(msg)
+                print(f"  🐺 {msg}")
+                break
         plan = plan_rework(session, review_key, artifact)
         if not plan:
             log.warning(

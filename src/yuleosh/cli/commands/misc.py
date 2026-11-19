@@ -828,6 +828,109 @@ def cmd_pipeline_status(name: str = None):
     status_pipeline(name)
 
 
+# ── Autonomy（任务协调层：工单 / Router / 历史召回）──────────────────
+
+def cmd_autonomy_scan(project_dir: str = None):
+    """扫描确定性信号并建单（受 OSH_AUTONOMY_MODE 控制）。"""
+    from yuleosh.pipeline.autonomy.triggers import autonomy_mode, propose_tickets
+
+    mode = autonomy_mode()
+    created = propose_tickets(project_dir or _osh_home())
+    print(f"Autonomy mode: {mode}")
+    if mode == "off":
+        print("OSH_AUTONOMY_MODE=off — 未创建工单（设为 observe / auto 启用）")
+        return
+    if not created:
+        print("没有新信号需要建单")
+        return
+    for ticket in created:
+        print(f"  🎫 {ticket.ticket_id}  {ticket.kind}  "
+              f"[{ticket.status}]  {ticket.payload.get('spec_path', '')}")
+
+
+def cmd_autonomy_ticket_add(kind: str = "manual", spec: str = None,
+                            note: str = "", project_dir: str = None):
+    from yuleosh.pipeline.autonomy.router import default_spec_path
+    from yuleosh.pipeline.autonomy.triggers import Ticket, TicketStore
+
+    root = project_dir or _osh_home()
+    spec_path = spec or default_spec_path(root)
+    if not spec_path or not Path(spec_path).is_file():
+        print(f"❌ 找不到 spec: {spec_path or '<none>'}", file=sys.stderr)
+        sys.exit(1)
+    ticket = Ticket(
+        kind=kind or "manual",
+        dedupe_key=f"manual:{os.urandom(4).hex()}",
+        payload={"project_dir": root, "spec_path": str(spec_path)},
+        note=note or "",
+    )
+    saved, _ = TicketStore(root).add(ticket)
+    print(f"🎫 {saved.ticket_id}  {saved.kind}  "
+          f"[{saved.status}]  {spec_path}")
+
+
+def cmd_autonomy_ticket_list(status: str = None, project_dir: str = None):
+    from yuleosh.pipeline.autonomy.triggers import TicketStore
+
+    tickets = TicketStore(project_dir or _osh_home()).list(status)
+    if not tickets:
+        print("没有工单")
+        return
+    for ticket in tickets:
+        print(f"{ticket.ticket_id}  {ticket.status:<10} {ticket.kind:<14} "
+              f"run={ticket.run_id or '-'}  {ticket.payload.get('spec_path', '')}")
+
+
+def cmd_autonomy_ticket_accept(ticket_id: str, project_dir: str = None):
+    from yuleosh.pipeline.autonomy.triggers import TicketStore
+
+    ticket = TicketStore(project_dir or _osh_home()).accept(ticket_id)
+    if ticket is None:
+        print(f"❌ 工单不存在: {ticket_id}", file=sys.stderr)
+        sys.exit(1)
+    print(f"✅ {ticket.ticket_id} → {ticket.status}")
+
+
+def cmd_autonomy_router(once: bool = False, cycles: int = 1,
+                        interval: float = 5.0, project_dir: str = None):
+    """领取 accepted 工单并通过 run_pipeline 执行（门禁不变）。"""
+    from yuleosh.pipeline.autonomy.router import Router
+
+    router = Router(project_dir or _osh_home())
+    results = router.run_once() if once else router.run_loop(
+        cycles=cycles, interval=interval)
+    if not results:
+        print("没有可执行的 accepted 工单")
+        return
+    for item in results:
+        print(f"  {item['ticket_id']}  {item['status']:<10} "
+              f"run={item['run_id'] or '-'}  {item['note']}")
+    if any(item["status"] != "done" for item in results):
+        sys.exit(1)
+
+
+def cmd_autonomy_recall_query(spec: str = None, as_json: bool = False,
+                              project_dir: str = None):
+    from yuleosh.pipeline.autonomy.recall import RecallStore, spec_fingerprint
+    from yuleosh.pipeline.autonomy.router import default_spec_path
+
+    root = project_dir or _osh_home()
+    spec_path = spec or default_spec_path(root)
+    fingerprint = spec_fingerprint(spec_path)
+    if not fingerprint:
+        print(f"❌ 找不到 spec: {spec_path or '<none>'}", file=sys.stderr)
+        sys.exit(1)
+    data = RecallStore(root).suggest(fingerprint)
+    if as_json:
+        print(json.dumps({"spec": spec_path, "fingerprint": fingerprint, **data},
+                         indent=2, ensure_ascii=False))
+        return
+    if not data["runs"]:
+        print(f"无历史运行: {spec_path}")
+        return
+    print(data["hint"])
+
+
 def cmd_review_auto():
     from yuleosh.review.run import auto_review
 
